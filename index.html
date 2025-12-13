@@ -1,0 +1,1501 @@
+with mobile mode.
+
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bannerghatta — Voices of the Wild (Prototype)</title>
+
+  <!-- fonts + icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+
+  <!-- jsPDF (UMD) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- QR generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <!-- Barcode (CODE128) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#071225; --panel:rgba(255,255,255,0.03); --muted:#9fb0c1; --accent1:#7c3aed; --accent2:#60a5fa;
+      --glass-border: rgba(255,255,255,0.04); font-family:Inter,system-ui,Arial; color:#e8f1f8;
+      --green:#0fbf7a; --yellow:#f5b63a; --red:#ef4444;
+      --touch-pad:12px;
+    }
+    :root[data-theme="light"]{
+      --bg:#f6f9fc; --panel:rgba(0,0,0,0.03); --muted:#4b5563; color:#06202a; --glass-border: rgba(0,0,0,0.06);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:linear-gradient(180deg,var(--bg),#022437);min-height:100vh}
+    .app{display:flex;gap:18px;padding:18px}
+    .sidebar{width:240px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);border-radius:16px;padding:18px;border:1px solid var(--glass-border)}
+    .brand{display:flex;gap:12px;align-items:center}
+    .brand img{width:48px;height:48px;border-radius:10px;object-fit:cover}
+    .nav{margin-top:18px;display:flex;flex-direction:column;gap:6px}
+    .nav button{background:transparent;border:0;color:var(--muted);padding:10px;border-radius:10px;text-align:left;cursor:pointer;font-weight:700}
+    .nav button.active{background:linear-gradient(90deg,var(--accent2),var(--accent1));color:white}
+    .controls{margin-top:auto;display:flex;flex-direction:column;gap:8px}
+    .main{flex:1;padding:8px}
+    .header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
+    .h-title{font-size:2rem;margin:0 0 6px}
+    .h-lead{color:var(--muted);margin:0 0 12px}
+    .btn{padding:10px 14px;border-radius:12px;border:0;cursor:pointer;font-weight:700}
+    .btn.primary{background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#fff}
+    .btn.ghost{background:transparent;border:1px solid var(--glass-border);color:var(--muted)}
+    .card{background:var(--panel);padding:14px;border-radius:12px;border:1px solid var(--glass-border);box-shadow:0 8px 30px rgba(0,0,0,0.25)}
+    .grid-2{display:grid;grid-template-columns:1fr 360px;gap:18px}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .form-grid label{display:block}
+    .form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:10px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit}
+    .muted{color:var(--muted)}
+    .footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .gallery-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:12px}
+    .gallery-grid img{width:100%;height:110px;object-fit:cover;border-radius:8px;cursor:pointer}
+    .toast{position:fixed;right:18px;bottom:18px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border)}
+    .small{font-size:13px;color:var(--muted)}
+    .lightbox{position:fixed;inset:0;background:rgba(2,6,23,0.8);display:flex;align-items:center;justify-content:center;z-index:200}
+    .lang-select{padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit}
+    .date-row{display:flex;gap:8px;overflow:auto;padding:12px 6px;margin-top:8px}
+    .date-chip{min-width:86px;padding:10px;border-radius:12px;border:1px solid var(--glass-border);text-align:center;cursor:pointer;background:transparent}
+    .date-chip.selected{background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#fff;transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,0.4)}
+    .slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:12px;max-height:460px;overflow:auto;padding-right:6px}
+    .slot-card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:14px;border-radius:12px;border:1px solid var(--glass-border);cursor:pointer;transition:transform .22s ease,box-shadow .22s ease}
+    .slot-card:hover{transform:translateY(-8px);box-shadow:0 24px 60px rgba(0,0,0,0.5)}
+    .slot-top{display:flex;align-items:center;gap:10px}
+    .slot-ic{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:center;font-size:18px}
+    .slot-time{font-weight:700;margin-bottom:6px}
+    .slot-remaining{font-size:13px;color:var(--muted)}
+    .status-pill{display:inline-block;padding:6px 10px;border-radius:999px;color:#fff;font-weight:700;font-size:12px;margin-top:8px}
+    .status-green{background:linear-gradient(90deg,var(--green),#00b36b)}
+    .status-yellow{background:linear-gradient(90deg,var(--yellow),#f2a41b);color:#0b0b0b}
+    .status-red{background:linear-gradient(90deg,var(--red),#e85555)}
+    .vehicle-badges{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+    .v-badge{padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.02);font-weight:700;font-size:12px;display:inline-flex;align-items:center;gap:6px}
+    .v-badge.disabled{opacity:.35;filter:grayscale(0.4);pointer-events:none}
+    .recent-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px dashed var(--glass-border)}
+    .badge-used{background:linear-gradient(90deg,var(--green),#00b36b);color:#fff;padding:6px 10px;border-radius:999px;font-weight:700;margin-left:8px;font-size:12px}
+    .sms-list{font-size:13px}
+    .sms-item{display:flex;align-items:flex-start;justify-content:space-between;padding:6px;border-bottom:1px dashed var(--glass-border)}
+    .sms-item .sms-meta{color:var(--muted);font-size:12px}
+    @media (max-width:980px){
+      .app{flex-direction:column}
+      .sidebar{display:none}
+      .grid-2{grid-template-columns:1fr}
+      .slot-grid{grid-template-columns:1fr}
+      /* ===== View Mode Overrides (NO UI CHANGE) ===== */
+html[data-view="desktop"] .sidebar{
+  display:block !important;
+}
+html[data-view="desktop"] .app{
+  flex-direction:row !important;
+}
+html[data-view="desktop"] .grid-2{
+  grid-template-columns:1fr 360px !important;
+}
+html[data-view="desktop"] .slot-grid{
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr)) !important;
+}
+    }
+  </style>
+</head>
+<body data-theme="dark">
+    <button id="viewToggleBtn"
+  style="
+    position:fixed;
+    bottom:18px;
+    left:18px;
+    z-index:9999;
+    padding:12px 16px;
+    border-radius:999px;
+    border:1px solid var(--glass-border);
+    background:linear-gradient(90deg,var(--accent1),var(--accent2));
+    color:white;
+    font-weight:700;
+    cursor:pointer;
+    display:none;">
+  Switch to Desktop
+</button>
+      <div class="app">
+    <aside class="sidebar card" aria-label="Sidebar">
+      <div class="brand">
+        <img src="images/logo.png" data-site="logo" alt="Bannerghatta logo" onerror="this.style.opacity=.2"/>
+        <div><h3>Bannerghatta</h3><div class="small muted">Voices of the Wild</div></div>
+      </div>
+      <nav class="nav" role="navigation" aria-label="Main">
+        <button class="active" data-to="home">Home</button>
+        <button data-to="booking">Booking</button>
+        <button data-to="gallery">Gallery</button>
+        <button data-to="complaint">Report</button>
+        <button data-to="about">About</button>
+        <button id="adminTabBtn" style="display:none" data-to="admin">Admin</button>
+      </nav>
+
+      <div class="controls">
+        <select id="lang" class="lang-select">
+          <option value="en">English</option>
+          <option value="kn">ಕನ್ನಡ</option>
+          <option value="hi">हिंदी</option>
+        </select>
+        <div style="display:flex;gap:6px">
+          
+          <button id="themeToggle" class="btn ghost">Theme</button>
+        </div>
+        <button id="adminBtn" class="btn ghost">Admin</button>
+      </div>
+    </aside>
+
+    <main class="main" role="main">
+      <div class="header">
+        <div>
+          <h1 class="h-title">Voices of the Wild</h1>
+          <div class="h-lead">Explore Bannerghatta — book responsibly, share photos, and report concerns.</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="heroBookSelect" class="lang-select">
+            <option value="safari">Book Safari</option>
+            <option value="zoo">Book Zoo</option>
+            <option value="butterfly">Book Butterfly Park</option>
+          </select>
+          <button id="heroBookBtn" class="btn primary">Book</button>
+        </div>
+      </div>
+
+      <!-- HOME -->
+      <section id="home" class="pane">
+        <div class="card grid-2">
+          <div>
+            <div style="display:flex;gap:8px">
+              <div class="card" style="flex:1;margin-right:8px">
+                <h3>Safari & Experiences</h3>
+                <p class="muted small">Jeep, Bus, AC & VIP options</p>
+              </div>
+              <div class="card" style="flex:1">
+                <h3>Community Gallery</h3>
+                <p class="muted small">Upload photos and share</p>
+              </div>
+              <div class="card" style="width:200px">
+                <h3 id="statBookings">0</h3><div class="small muted">Bookings</div>
+                <h3 id="statPhotos">0</h3><div class="small muted">Photos</div>
+                <h3 id="statComplaints">0</h3><div class="small muted">Complaints</div>
+              </div>
+            </div>
+            <div style="margin-top:12px" class="card">
+              <h3>Responsible Visits</h3>
+              <p class="muted small">Please follow park rules — do not feed animals, avoid loud noises, and use designated paths.</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <img src="images/hero.jpg" data-site="hero" alt="Hero" style="width:100%;height:200px;object-fit:cover;border-radius:8px;margin-bottom:8px" onerror="this.style.opacity=.25"/>
+            <h3>Next available safari</h3>
+            <div id="nextSlot">07:30 - 09:00</div>
+            <div style="margin-top:12px">
+              <button id="bookNow" class="btn primary">Book Now</button>
+              <button id="viewSlotsBtn" class="btn ghost">View slots</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BOOKING -->
+      <section id="booking" class="pane" style="display:none;margin-top:12px">
+        <h2>Book Tickets</h2>
+        <p class="muted small">Capacity per slot: <strong id="capValue">350</strong> people (vehicle-level availability enforced)</p>
+        <div class="grid-2">
+          <form id="bookingForm" class="card">
+            <div class="form-grid">
+              <label>Name<input id="name" required placeholder="Full name"></label>
+              <label>Mobile<input id="mobile" placeholder="+91XXXXXXXXXX"></label>
+              <label>Email<input id="email" type="email" placeholder="you@example.com"></label>
+
+              <label>Attraction
+                <select id="attraction">
+                  <option value="safari">Safari</option>
+                  <option value="zoo">Zoo</option>
+                  <option value="butterfly">Butterfly Park</option>
+                </select>
+              </label>
+
+              <div id="vehicleWrap">
+                <label>Vehicle
+                  <select id="vehicle">
+                    <option value="jeep">Jeep (4 seats)</option>
+                    <option value="bus">Bus (13 seats)</option>
+                    <option value="ac_bus">AC Bus (9 seats)</option>
+                    <option value="ac_jeep">AC Jeep (4 seats)</option>
+                    <option value="vip">VIP (4 seats)</option>
+                  </select>
+                </label>
+              </div>
+
+              <label>Date <input id="date" type="date"></label>
+              <label>Slot <select id="slot"></select></label>
+              <label>Tickets <input id="qty" type="number" min="1" value="1"></label>
+            </div>
+
+            <div style="margin-top:12px;display:flex;gap:10px;align-items:center">
+              <button type="submit" class="btn primary">Reserve & Download Ticket</button>
+              <button type="button" id="myBookingsBtn" class="btn ghost">My Bookings</button>
+              <div style="margin-left:auto" class="small muted" id="remainingInfo">Remaining: -</div>
+            </div>
+            <div style="margin-top:8px" id="pricePreview" class="muted small">Estimated price: -</div>
+          </form>
+
+          <aside class="card">
+            <h3>Booking Preview</h3>
+            <p><strong>Attraction:</strong> <span id="pAttraction">-</span></p>
+            <p><strong>Vehicle:</strong> <span id="pVehicle">-</span></p>
+            <p><strong>Date:</strong> <span id="pDate">-</span></p>
+            <p><strong>Slot:</strong> <span id="pSlot">-</span></p>
+            <p><strong>Tickets:</strong> <span id="pQty">1</span></p>
+            <hr/>
+            <h4>Recent</h4>
+            <div id="recentBookings" class="muted small"></div>
+          </aside>
+        </div>
+      </section>
+            <!-- GALLERY -->
+      <section id="gallery" class="pane" style="display:none;margin-top:12px">
+        <h2>Gallery</h2>
+        <form id="photoForm" class="card">
+          <input id="photoUploader" type="file" accept="image/*" multiple>
+          <div style="margin-top:8px">
+            <button class="btn primary" type="submit">Upload</button>
+            <button id="clearGallery" type="button" class="btn ghost">Clear</button>
+          </div>
+          <div class="muted small">Photos are stored locally (demo).</div>
+        </form>
+        <div id="galleryGrid" class="gallery-grid"></div>
+      </section>
+
+      <!-- COMPLAINT (client) -->
+      <section id="complaint" class="pane" style="display:none;margin-top:12px">
+        <h2>Report an Incident</h2>
+        <div class="grid-2">
+          <form id="complaintForm" class="card">
+            <label>Name<input id="cName" placeholder="Optional"></label>
+            <label>Contact<input id="cContact" placeholder="Phone or email"></label>
+            <label>Type
+              <select id="cType">
+                <option value="mistreatment">Animal Mistreatment</option>
+                <option value="sanitation">Sanitation</option>
+                <option value="staff">Staff behaviour</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label>Description<textarea id="cDesc" rows="5" required></textarea></label>
+            <label>Photo<input id="cPhoto" type="file" accept="image/*"></label>
+            <div style="margin-top:8px">
+              <button class="btn primary" type="submit">Register & Download PDF</button>
+              <button id="viewComplaints" type="button" class="btn ghost">View All</button>
+            </div>
+            <div id="cMsg" class="muted small"></div>
+          </form>
+
+          <aside class="card">
+            <h3>Complaints</h3>
+            <ul id="complaintsList" class="muted small"></ul>
+          </aside>
+        </div>
+      </section>
+      <!-- ABOUT -->
+      <section id="about" class="pane" style="display:none;margin-top:12px">
+        <h2>About Bannerghatta</h2>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Our Mission</h3>
+            <p class="muted small">Bannerghatta Biological Park is dedicated to wildlife conservation, education and responsible eco-tourism. We strive to provide safe, informative and enjoyable experiences for visitors while protecting habitat and animal welfare.</p>
+
+            <h3 style="margin-top:12px">Visitor Info</h3>
+            <p class="muted small">
+              Opening hours: 9:00 AM — 5:30 PM (daily)<br/>
+              Contact: +91-80-2296-XXXX • info@bannerghatta.example
+            </p>
+
+            <h3 style="margin-top:12px">Getting Here</h3>
+            <p class="muted small">Bannerghatta Road, Bengaluru — follow signboards from NICE Road / Hosur Road. Parking available near the main gate.</p>
+          </div>
+<!-- Built-by block (static) -->
+<div class="card" style="margin-top:12px">
+  <h3>Built by</h3>
+  <div class="muted small" style="line-height:1.6">
+    <div>Pragun R Gangur</div>
+    <div>Pratheek K</div>
+    <div>Pruthviraj Navani</div>
+    <div>Prjwal G M</div>
+    <div>Prajwal Hibare</div>
+    <div>Manu T</div>
+  </div>
+</div>
+          <aside class="card">
+            <h3>Quick facts</h3>
+            <ul class="muted small">
+              <li>Guided safaris available in jeeps and buses.</li>
+              <li>Online booking is recommended during weekends and holidays.</li>
+              <li>Do not feed or disturb animals; follow park rules.</li>
+            </ul>
+
+            <h3 style="margin-top:12px">Map & Access</h3>
+            <p class="muted small">A map is included on the ticket PDF if uploaded by admin.</p>
+
+            <div style="margin-top:12px">
+              <button id="openAboutPdf" class="btn ghost" title="Download About (PDF)">Download About (PDF)</button>
+            </div>
+          </aside>
+        </div>
+      </section>
+      <!-- SLOT MODAL (clients use this to view & pick slots directly) -->
+      <div id="slotModal" class="lightbox" style="display:none;align-items:flex-start;padding-top:60px;">
+        <div class="card" style="width:92%;max-width:680px;">
+          <h3>Select a Slot</h3>
+          <p class="muted small">Choose date (7-day view) and slot. Click a slot to select it for booking.</p>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+            <button id="prevWeek" class="btn ghost"><i class="fa fa-chevron-left"></i></button>
+            <div id="dateRow" class="date-row" role="list"></div>
+            <button id="nextWeek" class="btn ghost"><i class="fa fa-chevron-right"></i></button>
+            <select id="slotModalAttraction" style="margin-left:12px;padding:8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+              <option value="safari">Safari</option>
+              <option value="zoo">Zoo</option>
+              <option value="butterfly">Butterfly Park</option>
+            </select>
+            <div style="margin-left:auto"><button id="refreshSlotsBtn" class="btn ghost">Refresh</button></div>
+          </div>
+
+          <div id="slotList" class="slot-grid"></div>
+
+          <div style="text-align:right;margin-top:12px;">
+            <button id="closeSlotModal" class="btn ghost">Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- DOWNLOAD CONFIRM MODAL -->
+      <div id="downloadConfirmModal" class="lightbox" style="display:none;align-items:center;">
+        <div class="card" style="width:92%;max-width:520px;">
+          <h3>Confirm Ticket Download</h3>
+          <div id="downloadDetails" style="margin-top:8px"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+            <button id="cancelDownload" class="btn ghost">Cancel</button>
+            <button id="confirmDownload" class="btn primary">Confirm & Download</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCANNER MODAL (ADMIN only) -->
+      <div id="scannerModal" class="lightbox" style="display:none;align-items:flex-start;padding-top:60px">
+        <div class="card" style="width:92%;max-width:680px">
+          <h3>QR Scanner (demo)</h3>
+          <video id="qrVideo" style="width:100%;height:320px;background:#000" autoplay muted playsinline></video>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="stopScan" class="btn ghost">Stop</button>
+            <button id="manualIdBtn" class="btn">Manual ID</button>
+            <div id="scanStatus" class="muted small" style="margin-left:auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="toast" class="toast" style="display:none"></div>
+            <!-- ADMIN -->
+      <section id="admin" class="pane" style="display:none;margin-top:12px">
+        <h2>Admin (Demo)</h2>
+
+        <!-- Summary -->
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;gap:18px;align-items:flex-start">
+            <div style="flex:1">
+              <h3>Inventory Summary</h3>
+              <div id="adminDefaultText" class="muted small"></div>
+            </div>
+            <div style="flex:1">
+              <h3>Totals</h3>
+              <div id="adminTotals" class="muted small"></div>
+            </div>
+            <div style="flex:0 0 260px">
+              <h3>SMS Log (demo)</h3>
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+                <button id="clearSmsLogBtn" class="btn ghost" title="Clear all SMS">Clear SMS log</button>
+                <div class="muted small" style="margin-left:auto" id="smsCount">Sent: 0</div>
+              </div>
+              <div id="smsLog" class="muted small sms-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inventory Manager -->
+        <div class="card" style="margin-top:12px;">
+          <h3>Inventory Manager (Vehicle capacities per date/slot)</h3>
+          <p class="muted small">Set per-vehicle capacities for any date / attraction / slot. Admin only.</p>
+
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <label style="font-weight:700">Date:
+              <input id="invDate" type="date" style="padding:8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+            </label>
+            <label style="font-weight:700">Attraction:
+              <select id="invAttraction" style="padding:8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+                <option value="safari">Safari</option>
+                <option value="zoo">Zoo</option>
+                <option value="butterfly">Butterfly Park</option>
+              </select>
+            </label>
+            <label style="font-weight:700">Slot:
+              <select id="invSlot" style="padding:8px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit"></select>
+            </label>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button id="loadInvBtn" class="btn">Load</button>
+              <button id="saveInvBtn" class="btn primary">Save</button>
+              <button id="resetInvBtn" class="btn ghost">Reset</button>
+            </div>
+          </div>
+
+          <div id="invTable"></div>
+          <div class="muted small" style="margin-top:8px">Per-date overrides replace default totals for that date/slot.</div>
+        </div>
+
+        <!-- Default vehicle totals admin -->
+        <div class="card" style="margin-top:18px">
+          <h3>Default vehicle totals (admin)</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px">
+            <div style="width:180px" class="card">
+              <strong>JEEP</strong>
+              <div style="margin-top:6px">Vehicles: <input data-default="jeep" id="def-jeep" type="number" min="0" style="width:80px" value="18"></div>
+              <div class="muted small">Seats/veh: 4</div>
+            </div>
+
+            <div style="width:180px" class="card">
+              <strong>BUS</strong>
+              <div style="margin-top:6px">Vehicles: <input data-default="bus" id="def-bus" type="number" min="0" style="width:80px" value="28"></div>
+              <div class="muted small">Seats/veh: 13</div>
+            </div>
+
+            <div style="width:180px" class="card">
+              <strong>AC_BUS</strong>
+              <div style="margin-top:6px">Vehicles: <input data-default="ac_bus" id="def-ac_bus" type="number" min="0" style="width:80px" value="15"></div>
+              <div class="muted small">Seats/veh: 9</div>
+            </div>
+
+            <div style="width:180px" class="card">
+              <strong>AC_JEEP</strong>
+              <div style="margin-top:6px">Vehicles: <input data-default="ac_jeep" id="def-ac_jeep" type="number" min="0" style="width:80px" value="5"></div>
+              <div class="muted small">Seats/veh: 4</div>
+            </div>
+
+            <div style="width:180px" class="card">
+              <strong>VIP</strong>
+              <div style="margin-top:6px">Vehicles: <input data-default="vip" id="def-vip" type="number" min="0" style="width:80px" value="10"></div>
+              <div class="muted small">Seats/veh: 4</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;display:flex;gap:8px">
+            <button id="saveDefaultsBtn" class="btn primary">Save Defaults</button>
+            <button id="resetDefaultsBtn" class="btn ghost">Reset Defaults</button>
+            <div style="margin-left:auto" class="muted small">Change default totals (affects all future availability unless overridden per-date).</div>
+          </div>
+        </div>
+
+        <!-- Site images admin -->
+        <div id="imageManager" class="card" style="margin-top:18px;">
+          <h3>Site Images (Admin)</h3>
+          <p class="muted small">Upload logo, hero and zoo map images (stored locally in this browser).</p>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:220px">
+              <label style="display:block;font-weight:700;margin-bottom:6px">Logo (sidebar + PDF)</label>
+              <input id="uploadLogo" type="file" accept="image/*">
+              <div style="margin-top:8px;display:flex;gap:8px">
+                <button id="saveLogoBtn" class="btn">Save Logo</button>
+                <button id="downloadLogoBtn" class="btn ghost" disabled>Download</button>
+                <button id="resetLogoBtn" class="btn ghost">Reset</button>
+              </div>
+              <div style="margin-top:8px">
+                <img id="previewLogo" src="" alt="logo preview" style="width:140px;height:56px;object-fit:contain;border-radius:8px;border:1px solid var(--glass-border);display:none">
+              </div>
+            </div>
+
+            <div style="flex:2;min-width:260px">
+              <label style="display:block;font-weight:700;margin-bottom:6px">Hero image (homepage)</label>
+              <input id="uploadHero" type="file" accept="image/*">
+              <div style="margin-top:8px;display:flex;gap:8px">
+                <button id="saveHeroBtn" class="btn">Save Hero</button>
+                <button id="downloadHeroBtn" class="btn ghost" disabled>Download</button>
+                <button id="resetHeroBtn" class="btn ghost">Reset</button>
+              </div>
+              <div style="margin-top:8px">
+                <img id="previewHero" src="" alt="hero preview" style="width:100%;max-width:420px;height:120px;object-fit:cover;border-radius:8px;border:1px solid var(--glass-border);display:none">
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:18px;border-top:1px dashed var(--glass-border);padding-top:12px;">
+            <label style="display:block;font-weight:700;margin-bottom:6px">Zoo Map (for ticket PDF)</label>
+            <input id="uploadMap" type="file" accept="image/*">
+            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button id="saveMapBtn" class="btn">Save Map</button>
+              <button id="downloadMapBtn" class="btn ghost" disabled>Download</button>
+              <button id="resetMapBtn" class="btn ghost">Reset</button>
+            </div>
+            <div style="margin-top:8px">
+              <img id="previewMap" src="" alt="map preview" style="width:100%;max-width:420px;height:160px;object-fit:cover;border-radius:8px;border:1px solid var(--glass-border);display:none">
+            </div>
+          </div>
+        </div>
+
+        <!-- Complaints Manager (bottom of Admin) -->
+        <div id="adminComplaints" class="card" style="margin-top:18px;">
+          <h3>Complaints Manager</h3>
+          <p class="muted small">View client-registered complaints, mark resolved/reopen, download or delete.</p>
+          <div id="adminArea"></div>
+        </div>
+
+      </section>
+
+      <div class="footer small muted">© <span id="year"></span> Bannerghatta — Prototype • Address: Bannerghatta Road, Bengaluru, Karnataka 560083 • Phone: +91-80-2296-XXXX</div>
+    </main>
+  </div>
+    <script>
+  /*********** CONFIG & STORAGE KEYS ***********/
+  const SLOT_CAPACITY = 350;
+  let DEFAULT_VEHICLE_CAP = { jeep: 18, bus: 28, ac_bus: 15, ac_jeep: 5, vip: 10 };
+  const SEATS_PER_VEHICLE  = { jeep: 4, bus: 13, ac_bus: 9, ac_jeep: 4, vip: 4 };
+
+  const PRICING = {
+    safari: { jeep:{adult:360}, bus:{adult:370}, ac_bus:{adult:690}, ac_jeep:{adult:520}, vip:{adult:1000}, default:{adult:200} },
+    zoo: { adult:120, child:60, senior:70 },
+    butterfly: { adult:50, child:30, senior:30 }
+  };
+
+  const LS = { BOOKINGS:'bbp_bookings', PHOTOS:'bbp_photos', COMPLAINTS:'bbp_complaints', INVENTORY:'bbp_inventory' };
+  const SITE_LS = { LOGO:'site_logo', HERO:'site_hero', MAP:'site_map' };
+  const LS_DEFAULTS_KEY = 'bbp_defaults';
+  const LS_SMS_LOG = 'bbp_sms_log';
+  
+
+  const PARK_CONTACT = {
+    name: 'Bannerghatta Biological Park',
+    address: 'Bannerghatta Road, Bengaluru, Karnataka 560083, India',
+    phone: '+91-80-2296-XXXX',
+    email: 'info@bannerghatta.example'
+  };
+
+  const GATE_INFO = {
+    safari: 'Gate 2 — Safari boarding point near Hill View Restaurant / Safari Waiting Area.',
+    zoo: 'Gate 1 — Main Zoo entrance near Museum & Auditorium.',
+    butterfly: 'Butterfly Park Gate — follow signboards from main parking towards Butterfly Park.'
+  };
+  /*********** END CONFIG ***********/
+
+  const qs = s => document.querySelector(s);
+  const qsa = s => Array.from(document.querySelectorAll(s));
+
+  // localStorage helpers
+  function load(key){
+    try{ return JSON.parse(localStorage.getItem(key) || '[]'); } catch(e){ return []; }
+  }
+  function save(key, v){ localStorage.setItem(key, JSON.stringify(v)); }
+
+  function toast(msg, t=2400){ const el = qs('#toast'); if(!el) return; el.textContent = msg; el.style.display='block'; setTimeout(()=>el.style.display='none', t); }
+
+  /********** Load saved defaults (persisted) **********/
+  function loadSavedDefaults(){
+    try {
+      const saved = JSON.parse(localStorage.getItem(LS_DEFAULTS_KEY) || '{}');
+      if(saved && typeof saved === 'object' && Object.keys(saved).length){
+        DEFAULT_VEHICLE_CAP = Object.assign({}, DEFAULT_VEHICLE_CAP, saved);
+      }
+    } catch(e){ console.warn('loadSavedDefaults error', e); }
+  }
+  loadSavedDefaults();
+
+  /********** SLOTS & INVENTORY HELPERS (unchanged) **********/
+  function slotsFor(a){
+    if(a==='safari') return ['07:30 - 09:00','09:30 - 11:00','11:30 - 13:00','14:00 - 15:30','16:00 - 17:30'];
+    if(a==='zoo') return ['09:00 - 10:30','11:00 - 12:30','13:00 - 14:30','15:00 - 16:30'];
+    return ['09:30 - 10:30','11:00 - 12:00','13:00 - 14:00','15:00 - 16:00'];
+  }
+  function isoDate(d){ return new Date(d).toISOString().split('T')[0]; }
+  function addDays(date, days){ const d=new Date(date); d.setDate(d.getDate()+days); return d; }
+  function startOfWeek(d){ const dt=new Date(d); const day=dt.getDay(); const diff=dt.getDate()-day+(day===0? -6:1); const st=new Date(dt.setDate(diff)); st.setHours(0,0,0,0); return st; }
+
+  function getInventory(){
+    try{ return JSON.parse(localStorage.getItem(LS.INVENTORY) || '{}'); } catch(e){ return {}; }
+  }
+  function setInventory(obj){ localStorage.setItem(LS.INVENTORY, JSON.stringify(obj)); }
+
+  function getVehicleCapacity(attraction, date, slot, vehicle){
+    const inv = getInventory();
+    if(inv[date] && inv[date][attraction] && inv[date][attraction][slot] &&
+       typeof inv[date][attraction][slot][vehicle] !== 'undefined'){
+      return Number(inv[date][attraction][slot][vehicle]);
+    }
+    if(attraction==='safari') return DEFAULT_VEHICLE_CAP[vehicle] || 0;
+    return Math.ceil(SLOT_CAPACITY / 1);
+  }
+
+  function getVehicleRemainingSeats(attraction, date, slot, vehicle){
+    const vehicleCount = getVehicleCapacity(attraction, date, slot, vehicle);
+    const capacitySeats = vehicleCount * (SEATS_PER_VEHICLE[vehicle] || 1);
+    const arr = load(LS.BOOKINGS);
+    let usedSeats = 0;
+    for(let b of arr){
+      if(b.attraction===attraction && b.date===date && b.slot===slot && b.vehicle===vehicle){
+        usedSeats += Number(b.qty || 0);
+      }
+    }
+    return Math.max(0, capacitySeats - usedSeats);
+  }
+
+  function getVehicleRemainingCount(attraction, date, slot, vehicle){
+    const totalVeh = getVehicleCapacity(attraction,date,slot,vehicle);
+    const usedSeats = (function(){
+      let used=0;
+      const arr=load(LS.BOOKINGS);
+      for(let b of arr) if(b.attraction===attraction && b.date===date && b.slot===slot && b.vehicle===vehicle) used += Number(b.qty||0);
+      return used;
+    })();
+    const seatsPer = SEATS_PER_VEHICLE[vehicle] || 1;
+    const usedVeh = Math.ceil(usedSeats / seatsPer);
+    return Math.max(0, totalVeh - usedVeh);
+  }
+
+  function remainingSeats(attraction, date, slot){
+    if(!date || !slot) return SLOT_CAPACITY;
+    if(attraction==='safari'){
+      let sum=0;
+      for(let v of Object.keys(DEFAULT_VEHICLE_CAP)){
+        sum += getVehicleRemainingSeats(attraction,date,slot,v);
+      }
+      return sum;
+    } else {
+      const arr = load(LS.BOOKINGS); let used=0;
+      for(let b of arr) if(b.attraction===attraction && b.date===date && b.slot===slot) used += Number(b.qty||0);
+      return Math.max(0, SLOT_CAPACITY - used);
+    }
+  }
+
+  function slotStatusClass(remaining){
+    if(remaining < 20) return 'status-red';
+    if(remaining < 100) return 'status-yellow';
+    return 'status-green';
+  }
+  function slotStatusText(remaining){
+    if(remaining < 20) return 'Almost Full';
+    if(remaining < 100) return 'Limited';
+    return 'Available';
+  }
+
+  /********** UI: Slots modal + interaction (unchanged) **********/
+  let slotState = { currentWeekStart: startOfWeek(new Date()), selectedDate: isoDate(new Date()) };
+
+  function renderDateRow(){
+    const container = qs('#dateRow'); if(!container) return;
+    container.innerHTML='';
+    const start = slotState.currentWeekStart;
+    for(let i=0;i<7;i++){
+      const d = addDays(start,i);
+      const iso = isoDate(d);
+      const chip = document.createElement('div'); chip.className='date-chip'+(iso===slotState.selectedDate?' selected':''); chip.dataset.iso=iso;
+      chip.innerHTML = `<div style="font-weight:700">${d.toLocaleDateString(undefined,{weekday:'short'})}</div><div style="font-size:13px;margin-top:6px">${d.getDate()} ${d.toLocaleString(undefined,{month:'short'})}</div>`;
+      chip.addEventListener('click', ()=>{ slotState.selectedDate = iso; renderDateRow(); loadSlotsToModal(); });
+      container.appendChild(chip);
+    }
+  }
+
+  function vehicleIcon(v){
+    if(v==='jeep') return '<i class="fa fa-car-side"></i>';
+    if(v==='bus') return '<i class="fa fa-bus"></i>';
+    if(v==='ac_bus' || v==='ac_jeep') return '<i class="fa fa-snowflake"></i>';
+    if(v==='vip') return '<i class="fa fa-gem"></i>';
+    return '<i class="fa fa-car"></i>';
+  }
+
+  function loadSlotsToModal(){
+    const attractionSel = qs('#slotModalAttraction'); if(!attractionSel) return;
+    const attraction = attractionSel.value || 'safari';
+    const date = slotState.selectedDate || isoDate(new Date());
+    const slots = slotsFor(attraction);
+    const container = qs('#slotList'); container.innerHTML='';
+
+    slots.forEach(slot=>{
+      const remaining = remainingSeats(attraction,date,slot);
+      const card = document.createElement('div'); card.className='slot-card';
+      let iconHtml = (attraction==='safari')? '<i class="fa fa-paw"></i>' : (attraction==='zoo')? '<i class="fa fa-tree"></i>' : '<i class="fa fa-bug"></i>';
+
+      let vehicleBadges = '';
+      if(attraction==='safari'){
+        vehicleBadges = '<div class="vehicle-badges">';
+        for(let v of Object.keys(DEFAULT_VEHICLE_CAP)){
+          const vehRemCount = getVehicleRemainingCount(attraction,date,slot,v);
+          const seatsRem = getVehicleRemainingSeats(attraction,date,slot,v);
+          vehicleBadges += `<span class="v-badge ${vehRemCount===0? 'disabled':''}" title="${v}">${vehicleIcon(v)} ${v.toUpperCase()} <strong style="margin-left:6px">${vehRemCount} veh / ${seatsRem} seats</strong></span>`;
+        }
+        vehicleBadges += '</div>';
+      }
+
+      card.innerHTML = `<div class="slot-top"><div class="slot-ic">${iconHtml}</div><div style="flex:1"><div class="slot-time">${slot}</div><div class="slot-remaining">Remaining total seats: ${remaining}</div><div class="status-pill ${slotStatusClass(remaining)}">${slotStatusText(remaining)}</div></div></div>${vehicleBadges}`;
+
+      card.addEventListener('click', ()=>{
+        if(qs('#attraction')) qs('#attraction').value = attraction;
+        renderSlotOptions(attraction);
+        if(qs('#date')) qs('#date').value = date;
+        if(qs('#slot')) qs('#slot').value = slot;
+
+        if(attraction==='safari' && qs('#vehicle')){
+          const vehs = Object.keys(DEFAULT_VEHICLE_CAP);
+          let chosen = vehs.find(v=> getVehicleRemainingSeats(attraction,date,slot,v) >= 1 );
+          if(!chosen) chosen = 'jeep';
+          qs('#vehicle').value = chosen;
+        }
+
+        updatePreview();
+        qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="booking"]').classList.add('active');
+        qsa('.pane').forEach(p=>p.style.display='none'); qs('#booking').style.display='block';
+        toast('Selected slot ' + slot + ' • ' + date);
+        qs('#slotModal').style.display='none';
+      });
+
+      container.appendChild(card);
+    });
+  }
+
+  function renderSlotOptions(attraction){
+    const slot = qs('#slot'); if(!slot) return;
+    slot.innerHTML='';
+    slotsFor(attraction).forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; slot.appendChild(o); });
+  }
+
+  /********** Booking form helpers + auto-consume vehicle availability **********/
+  function getPrice(attraction, vehicle, qty=1){
+    if(attraction==='safari'){
+      const v = PRICING.safari[vehicle] || PRICING.safari.default;
+      return (v.adult||PRICING.safari.default.adult) * qty;
+    } else if(attraction==='zoo'){
+      return (PRICING.zoo.adult||0) * qty;
+    } else {
+      return (PRICING.butterfly.adult||0) * qty;
+    }
+  }
+
+  function updatePreview(){
+    const a = qs('#attraction')?.value;
+    const v = qs('#vehicle') ? qs('#vehicle').value : '';
+    const q = Number(qs('#qty')?.value)||1;
+    const date = qs('#date')?.value;
+    const slot = qs('#slot')?.value;
+    if(qs('#pAttraction')) qs('#pAttraction').textContent = a || '-';
+    if(qs('#pVehicle')) qs('#pVehicle').textContent = v || '-';
+    if(qs('#pDate')) qs('#pDate').textContent = date || '-';
+    if(qs('#pSlot')) qs('#pSlot').textContent = slot || '-';
+    if(qs('#pQty')) qs('#pQty').textContent = q;
+    if(qs('#remainingInfo')) qs('#remainingInfo').textContent = 'Remaining seats: ' + remainingSeats(a,date,slot);
+    if(qs('#pricePreview')) qs('#pricePreview').textContent = 'Estimated price: Rs. ' + getPrice(a,v,q);
+  }
+
+  /********** PDF + QR + Barcode + Gate instructions (unchanged) **********/
+  async function downloadTicketPDF(booking){
+    try{
+      const qr = new QRious({ value: booking.id, size: 400 });
+      const qrData = qr.toDataURL();
+
+      let barcodeData = null;
+      if(window.JsBarcode){
+        const canvas = document.createElement('canvas');
+        try{
+          JsBarcode(canvas, booking.id, { format:'CODE128', width:1.4, height:40, displayValue:false, margin:0 });
+          barcodeData = canvas.toDataURL('image/png');
+        }catch(e){ console.warn('Barcode generation failed', e); }
+      }
+
+      const logoData = localStorage.getItem(SITE_LS.LOGO);
+      const mapData  = localStorage.getItem(SITE_LS.MAP);
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 36;
+      let y = margin;
+
+      const headerHeight = 72;
+      doc.setFillColor(12, 28, 40);
+      doc.rect(0, 0, pageW, headerHeight + 10, 'F');
+
+      const logoMaxH = 56;
+      const logoMaxW = 120;
+      if(logoData){
+        try{
+          const lx = margin;
+          const ly = Math.round((headerHeight - logoMaxH) / 2);
+          doc.addImage(logoData, 'PNG', lx, ly + 6, logoMaxW, logoMaxH, undefined, 'FAST');
+        }catch(e){ console.warn('logo add error', e); }
+      }
+
+      doc.setTextColor(255,255,255);
+      doc.setFont('Helvetica','bold'); doc.setFontSize(18);
+      const title = PARK_CONTACT.name || 'Bannerghatta Biological Park';
+      const titleX = margin + (logoData ? logoMaxW + 12 : 0);
+      doc.text(title, titleX, 32);
+
+      doc.setFontSize(11);
+      doc.setFont('Helvetica','normal');
+      const ts = new Date().toLocaleString();
+      doc.text(`Issued: ${ts}`, pageW - margin - 200, 28);
+
+      y = headerHeight + 18;
+      doc.setDrawColor(220,220,220);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y, pageW - margin, y);
+      y += 18;
+
+      const leftX = margin;
+      const leftW = pageW * 0.56 - margin;
+      const rightX = pageW * 0.56;
+      const rightW = pageW - margin - rightX;
+
+      doc.setFillColor(245,247,250);
+      doc.roundedRect(leftX, y - 6, leftW - 8, 210, 6, 6, 'F');
+
+      const innerPad = 12;
+      let ty = y + innerPad;
+      doc.setTextColor(18, 28, 38);
+      doc.setFontSize(12);
+      doc.setFont('Helvetica','bold');
+      doc.text('Booking Details', leftX + innerPad, ty);
+      ty += 18;
+      doc.setFont('Helvetica','normal'); doc.setFontSize(11);
+
+      const kv = [
+        ['Booking ID', booking.id || '-'],
+        ['Name', booking.name || '-'],
+        ['Mobile', booking.mobile || '-'],
+        ['Email', booking.email || '-'],
+        ['Attraction', booking.attraction || '-'],
+        ['Vehicle', booking.vehicle || '-'],
+        ['Date', booking.date || '-'],
+        ['Slot', booking.slot || '-'],
+        ['Tickets', String(booking.qty || 1)]
+      ];
+
+      const labelX = leftX + innerPad;
+      const valueX = leftX + innerPad + 120;
+      kv.forEach(pair=>{
+        doc.setFont('Helvetica','bold'); doc.setTextColor(34,34,34);
+        doc.text(pair[0]+':', labelX, ty);
+        doc.setFont('Helvetica','normal'); doc.setTextColor(64,64,64);
+        const text = String(pair[1]);
+        const split = doc.splitTextToSize(text, leftW - innerPad - 140);
+        doc.text(split, valueX, ty);
+        ty += Math.max(16, (split.length * 12) + 6);
+      });
+
+      if(booking.used){
+        ty += 6;
+        doc.setFont('Helvetica','bold'); doc.setTextColor(0,128,64);
+        doc.text('Status: USED (verified)', labelX, ty);
+      }
+
+      const qrCardY = y;
+      doc.setFillColor(255,255,255);
+      doc.roundedRect(rightX + 8, qrCardY - 6, rightW - 16, 300, 8, 8, 'F');
+
+      const qrSize = Math.min(140, rightW - 40);
+      const qrX = rightX + 8 + ((rightW - 16) - qrSize) / 2;
+      const qrY = qrCardY + 10;
+      doc.addImage(qrData, 'PNG', qrX, qrY, qrSize, qrSize, undefined, 'FAST');
+
+      if(barcodeData){
+        const bcW = qrSize;
+        const bcH = 40;
+        const bcX = qrX;
+        const bcY = qrY + qrSize + 8;
+        doc.addImage(barcodeData, 'PNG', bcX, bcY, bcW, bcH, undefined, 'FAST');
+      }
+
+      doc.setFontSize(9); doc.setFont('Helvetica','normal'); doc.setTextColor(60,60,60);
+      const verifyText = 'Scan QR or barcode at entry to verify this ticket.';
+      const txtY = qrY + qrSize + 60;
+      doc.text(verifyText, rightX + 16, txtY, { maxWidth: rightW - 32 });
+
+      if(mapData){
+        const mapW = rightW - 32;
+        const mapH = 80;
+        const mapX = rightX + 16;
+        const mapY = txtY + 16;
+        doc.setDrawColor(225,225,225);
+        doc.roundedRect(mapX - 4, mapY - 4, mapW + 8, mapH + 18, 4, 4, 'S');
+        doc.addImage(mapData, 'PNG', mapX, mapY, mapW, mapH, undefined, 'FAST');
+        doc.setFontSize(9); doc.setTextColor(80,80,80);
+        doc.text('Zoo Map (not to scale)', mapX, mapY + mapH + 12);
+      }
+
+      const gateTxt = GATE_INFO[(booking.attraction||'safari')] || 'Follow park signboards to reach the correct entry gate.';
+      doc.setFontSize(9); doc.setTextColor(70,70,70);
+      const gateLines = doc.splitTextToSize('Gate instructions: ' + gateTxt, rightW - 32);
+      doc.text(gateLines, rightX + 16, (mapData ? (txtY + 16 + 80 + 28) : (txtY + 24)));
+
+      const footerY = 760;
+      doc.setDrawColor(220,220,220); doc.setLineWidth(0.4); doc.line(margin, footerY - 12, pageW - margin, footerY - 12);
+
+      doc.setFontSize(10); doc.setTextColor(90,90,90);
+      const footLeft = `${PARK_CONTACT.name}\n${PARK_CONTACT.address}\nPhone: ${PARK_CONTACT.phone} • Email: ${PARK_CONTACT.email}`;
+      const footLeftLines = doc.splitTextToSize(footLeft, pageW / 2 - margin);
+      doc.text(footLeftLines, margin, footerY);
+
+      const footRight = 'Please carry a printed or digital copy of this ticket. Tickets are non-transferable. For assistance, contact park authorities.';
+      const footRightLines = doc.splitTextToSize(footRight, pageW / 2 - margin);
+      doc.text(footRightLines, pageW / 2 + 10, footerY);
+
+      doc.setFontSize(8); doc.setTextColor(140,140,140);
+      const tsLabel = `Generated: ${new Date().toLocaleString()}`;
+      const txtW = doc.getTextWidth(tsLabel);
+      doc.text(tsLabel, pageW - margin - txtW, footerY + 26);
+
+      const filename = `bbp_ticket_${booking.id}.pdf`;
+      doc.save(filename);
+    } catch(err){
+      console.error('PDF generation error:', err);
+      alert('Unable to create ticket PDF: ' + (err && err.message ? err.message : String(err)));
+    }
+  }
+
+  /********** BOOKING submit + auto-update inventory (unchanged) **********/
+  function bookSubmitHandler(ev){
+    ev.preventDefault();
+    const name = (qs('#name')||{}).value.trim(); if(!name) return toast('Enter name');
+    const mobile = (qs('#mobile')||{}).value.trim();
+    const email = (qs('#email')||{}).value.trim();
+    const attraction = (qs('#attraction')||{}).value || 'safari';
+    const vehicle = qs('#vehicle') ? qs('#vehicle').value : '';
+    const date = (qs('#date')||{}).value; if(!date) return toast('Choose date');
+    const slot = (qs('#slot')||{}).value;
+    const qty = Number((qs('#qty')||{}).value) || 1;
+
+    if(attraction==='safari'){
+      const remSeats = getVehicleRemainingSeats(attraction,date,slot,vehicle);
+      if(qty > remSeats) return toast(`Not enough seats in ${vehicle.toUpperCase()}. Remaining seats: ${remSeats}`);
+    } else {
+      const rem = remainingSeats(attraction,date,slot);
+      if(qty > rem) return toast('Not enough seats for this slot. Remaining: '+ rem);
+    }
+
+    const booking = { id:'BK'+Date.now(), name, mobile, email, attraction, vehicle, date, slot, qty, ts:new Date().toISOString(), used:false };
+    const arr = load(LS.BOOKINGS); arr.unshift(booking); save(LS.BOOKINGS, arr);
+
+    if(mobile){
+      const smsLog = JSON.parse(localStorage.getItem(LS_SMS_LOG) || '[]');
+      const msg = `Your ticket for Bannerghatta National Park is successfully booked. Booking ID: ${booking.id}`;
+      smsLog.unshift({ id:'SMS'+Date.now(), to: mobile, msg, ts: new Date().toISOString() });
+      localStorage.setItem(LS_SMS_LOG, JSON.stringify(smsLog));
+      toast('Demo SMS logged to ' + mobile);
+      renderSmsLog();
+    }
+
+    toast('Booking saved — generating PDF...');
+    downloadTicketPDF(booking).then(()=>{ renderRecent(); updateStats(); updatePreview(); renderAdminSummary(); });
+  }
+
+  /********** Gallery & Complaints (unchanged) **********/
+  function renderGallery(){
+    const g = qs('#galleryGrid'); if(!g) return; g.innerHTML='';
+    const arr = load(LS.PHOTOS);
+    arr.forEach(p=>{ const img = document.createElement('img'); img.src=p.data; img.alt=p.name; img.addEventListener('click', ()=>window.open(p.data,'_blank')); g.appendChild(img); });
+    updateStats();
+  }
+
+  function renderComplaints(){
+    const ul = qs('#complaintsList'); if(!ul) return; ul.innerHTML='';
+    const arr = load(LS.COMPLAINTS);
+    arr.forEach(c=>{ const li=document.createElement('li'); li.innerHTML = `<strong>${c.type}</strong> - ${c.desc.slice(0,120)}<br/><small>${new Date(c.ts).toLocaleString()} • ${c.resolved? 'Resolved':'Open'}</small>`; ul.appendChild(li); });
+    updateStats();
+  }
+
+  /********** Recent bookings (client) — download confirm, cancel, delete (unchanged) **********/
+  let pendingDownloadBooking = null;
+  function showDownloadConfirm(booking){
+    pendingDownloadBooking = booking;
+    const d = qs('#downloadDetails'); if(!d) return;
+    d.innerHTML = `<p><strong>${booking.id}</strong></p><p class="muted small">${booking.name} • ${booking.attraction} • ${booking.date} • ${booking.slot} • x${booking.qty}</p>`;
+    qs('#downloadConfirmModal').style.display='flex';
+  }
+  function hideDownloadConfirm(){ pendingDownloadBooking = null; qs('#downloadConfirmModal').style.display='none'; }
+
+  function renderRecent(){
+    const container = qs('#recentBookings'); if(!container) return;
+    container.innerHTML='';
+    const arr = load(LS.BOOKINGS);
+    if(!arr.length){ container.innerHTML = '<div class="muted small">No bookings yet</div>'; return; }
+    arr.slice(0,12).forEach(b=>{
+      const row = document.createElement('div'); row.className='recent-item';
+      const left = document.createElement('div');
+      left.innerHTML = `<strong>${b.id}</strong> <div class="muted small">${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}</div>`;
+      if(b.used){ const badge = document.createElement('span'); badge.className='badge-used'; badge.textContent='USED'; left.appendChild(badge); }
+      const actions = document.createElement('div');
+
+      const dlBtn = document.createElement('button'); dlBtn.className='btn'; dlBtn.textContent='Download';
+      dlBtn.addEventListener('click', ()=> showDownloadConfirm(b));
+
+      const cancelBtn = document.createElement('button'); cancelBtn.className='btn ghost'; cancelBtn.textContent='Cancel';
+      cancelBtn.addEventListener('click', ()=> {
+        if(!confirm(`Cancel booking ${b.id}? This will free the seats.`)) return;
+        cancelBooking(b.id);
+      });
+
+      const delBtn = document.createElement('button'); delBtn.className='btn ghost'; delBtn.textContent='Delete';
+      delBtn.addEventListener('click', ()=> {
+        if(!confirm(`Delete booking ${b.id}? This cannot be undone.`)) return;
+        deleteBooking(b.id);
+      });
+
+      actions.appendChild(dlBtn);
+      actions.appendChild(cancelBtn);
+      actions.appendChild(delBtn);
+      row.appendChild(left); row.appendChild(actions);
+      container.appendChild(row);
+    });
+  }
+
+  function cancelBooking(id){
+    let arr = load(LS.BOOKINGS);
+    const idx = arr.findIndex(x=>x.id===id);
+    if(idx===-1) return toast('Booking not found');
+    const [removed] = arr.splice(idx,1);
+    save(LS.BOOKINGS, arr);
+    toast('Cancelled ' + id);
+    renderRecent();
+    updateStats();
+    renderAdminSummary();
+  }
+
+  function deleteBooking(id){
+    let arr = load(LS.BOOKINGS);
+    const exists = arr.some(x=>x.id===id);
+    if(!exists){ toast('Booking not found'); return; }
+    arr = arr.filter(x=>x.id !== id);
+    save(LS.BOOKINGS, arr);
+    toast('Deleted ' + id);
+    renderRecent();
+    updateStats();
+    renderAdminSummary();
+  }
+
+  /********** Admin inventory editor (unchanged) **********/
+  function renderInventorySlotOptions(){
+    const el = qs('#invSlot'); if(!el) return; el.innerHTML='';
+    const a = qs('#invAttraction').value || 'safari';
+    slotsFor(a).forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; el.appendChild(o); });
+  }
+
+  function loadInventoryToEditor(){
+    if(!isAdminUnlocked()) return alert('Unlock Admin to modify inventory');
+    const date = qs('#invDate').value; const attraction = qs('#invAttraction').value; const slot = qs('#invSlot').value;
+    if(!date || !attraction || !slot) return toast('Select date/attraction/slot');
+    const inv = getInventory(); const existing = (inv[date] && inv[date][attraction] && inv[date][attraction][slot]) ? inv[date][attraction][slot] : null;
+    const container = qs('#invTable'); container.innerHTML='';
+
+    if(attraction==='safari'){
+      Object.keys(DEFAULT_VEHICLE_CAP).forEach(v=>{
+        const value = existing && typeof existing[v] !== 'undefined' ? existing[v] : DEFAULT_VEHICLE_CAP[v];
+        const bookedSeats = (function(){
+          const arr = load(LS.BOOKINGS); let used=0;
+          for(let b of arr) if(b.attraction===attraction && b.date===date && b.slot===slot && b.vehicle===v) used += Number(b.qty||0);
+          return used;
+        })();
+        const remainingSeats = Math.max(0, (value * (SEATS_PER_VEHICLE[v]||1)) - bookedSeats);
+        const row = document.createElement('div'); row.style.marginBottom='8px';
+        row.innerHTML = `<div style="display:flex;align-items:center;gap:12px">
+            <div style="width:120px;font-weight:700">${v.toUpperCase()}</div>
+            <div style="flex:1">
+              <div class="muted small">Cap: ${value} veh<br/>Booked seats: ${bookedSeats}<br/>Remaining seats: ${remainingSeats}</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn ghost inv-minus" data-vehicle="${v}">-</button>
+              <input data-vehicle="${v}" type="number" min="0" value="${value}" style="width:74px">
+              <button class="btn ghost inv-plus" data-vehicle="${v}">+</button>
+            </div>
+          </div>`;
+        container.appendChild(row);
+      });
+
+      container.querySelectorAll('.inv-plus').forEach(btn=>{
+        btn.addEventListener('click', (ev)=>{
+          const v = btn.dataset.vehicle; const inp = container.querySelector(`input[data-vehicle="${v}"]`);
+          inp.value = Number(inp.value||0) + 1;
+        });
+      });
+      container.querySelectorAll('.inv-minus').forEach(btn=>{
+        btn.addEventListener('click', (ev)=>{
+          const v = btn.dataset.vehicle; const inp = container.querySelector(`input[data-vehicle="${v}"]`);
+          inp.value = Math.max(0, Number(inp.value||0) - 1);
+        });
+      });
+
+    } else {
+      const pool = existing && existing.pool ? existing.pool : SLOT_CAPACITY;
+      const used = SLOT_CAPACITY - remainingSeats(attraction,date,slot);
+      const row = document.createElement('div'); row.innerHTML = `<div style="display:flex;align-items:center;gap:12px">
+        <div style="width:160px;font-weight:700">Slot capacity (pool)</div>
+        <div style="flex:1"><div class="muted small">Cap: ${pool}<br/>Booked: ${used}<br/>Rem: ${Math.max(0,pool-used)}</div></div>
+        <div style="display:flex;gap:6px;align-items:center"><button class="btn ghost inv-minus" data-vehicle="pool">-</button><input data-vehicle="pool" type="number" min="0" value="${pool}" style="width:74px"><button class="btn ghost inv-plus" data-vehicle="pool">+</button></div>
+      </div>`;
+      container.appendChild(row);
+      container.querySelectorAll('.inv-plus').forEach(btn=> btn.addEventListener('click', ()=>{ const inp = container.querySelector('input[data-vehicle="pool"]'); inp.value = Number(inp.value||0)+1; }));
+      container.querySelectorAll('.inv-minus').forEach(btn=> btn.addEventListener('click', ()=>{ const inp = container.querySelector('input[data-vehicle="pool"]'); inp.value = Math.max(0, Number(inp.value||0)-1); }));
+    }
+  }
+
+  function saveInventoryFromEditor(){
+    if(!isAdminUnlocked()) return alert('Unlock Admin to modify inventory');
+    const date = qs('#invDate').value; const attraction = qs('#invAttraction').value; const slot = qs('#invSlot').value;
+    if(!date || !attraction || !slot) return toast('Select date/attraction/slot');
+    const inv = getInventory(); inv[date] = inv[date]||{}; inv[date][attraction] = inv[date][attraction]||{}; inv[date][attraction][slot] = inv[date][attraction][slot]||{};
+    const inputs = qs('#invTable').querySelectorAll('input[data-vehicle]');
+    inputs.forEach(inp=>{ const v = inp.getAttribute('data-vehicle'); inv[date][attraction][slot][v] = Number(inp.value||0); });
+    setInventory(inv);
+    toast('Inventory saved for ' + date + ' / ' + attraction + ' / ' + slot);
+    loadSlotsToModal(); renderInventorySlotOptions(); updatePreview(); renderAdminSummary();
+  }
+
+  function resetInventoryForSelection(){
+    if(!isAdminUnlocked()) return alert('Unlock Admin to modify inventory');
+    const date = qs('#invDate').value; const attraction = qs('#invAttraction').value; const slot = qs('#invSlot').value;
+    if(!date || !attraction || !slot) return toast('Select date/attraction/slot');
+    const inv = getInventory();
+    if(inv[date] && inv[date][attraction] && inv[date][attraction][slot]){ delete inv[date][attraction][slot]; setInventory(inv); toast('Inventory reset to defaults'); loadInventoryToEditor(); loadSlotsToModal(); updatePreview(); }
+    else toast('No custom inventory set for this selection');
+  }
+
+  /********** Admin defaults save/reset wiring (unchanged) **********/
+  function applyDefaultsToUI(){
+    document.querySelectorAll('input[data-default]').forEach(inp=>{
+      const key = inp.getAttribute('data-default');
+      if(typeof DEFAULT_VEHICLE_CAP[key] !== 'undefined') inp.value = DEFAULT_VEHICLE_CAP[key];
+    });
+    renderAdminSummary();
+  }
+
+  function saveDefaultVehicleTotalsFromUI(){
+    const inputs = document.querySelectorAll('input[data-default]');
+    const toSave = {};
+    inputs.forEach(inp=>{
+      const key = inp.getAttribute('data-default');
+      const val = Number(inp.value || 0);
+      if(key) toSave[key] = val;
+    });
+    localStorage.setItem(LS_DEFAULTS_KEY, JSON.stringify(toSave));
+    DEFAULT_VEHICLE_CAP = Object.assign({}, DEFAULT_VEHICLE_CAP, toSave);
+    applyDefaultsToUI();
+    loadSlotsToModal();
+    renderInventorySlotOptions();
+    updatePreview();
+    toast('Default vehicle totals saved');
+  }
+
+  function resetDefaultVehicleTotalsToBuiltins(){
+    localStorage.removeItem(LS_DEFAULTS_KEY);
+    DEFAULT_VEHICLE_CAP = { jeep: 18, bus: 28, ac_bus: 15, ac_jeep: 5, vip: 10 };
+    applyDefaultsToUI();
+    loadSlotsToModal();
+    updatePreview();
+    toast('Defaults reset to built-in values');
+  }
+
+  function renderAdminSummary(){
+    const el = qs('#adminDefaultText');
+    if(el){
+      el.innerHTML = Object.keys(DEFAULT_VEHICLE_CAP).map(k=>{
+        const veh = DEFAULT_VEHICLE_CAP[k]||0;
+        const seats = veh * (SEATS_PER_VEHICLE[k]||1);
+        return `${k.toUpperCase()}: ${veh} vehicles • ${seats} seats`;
+      }).join('<br>');
+    }
+    const totalsEl = qs('#adminTotals');
+    if(totalsEl){
+      const totalVehicles = Object.values(DEFAULT_VEHICLE_CAP).reduce((a,b)=>a+b,0);
+      const totalSeats = Object.keys(DEFAULT_VEHICLE_CAP).reduce((acc,k)=> acc + (DEFAULT_VEHICLE_CAP[k] * (SEATS_PER_VEHICLE[k]||1)), 0);
+      const sampleDate = isoDate(new Date());
+      const sampleSlot = slotsFor('safari')[0];
+      let remainingVehiclesSample = 0;
+      let remainingSeatsSample = 0;
+      Object.keys(DEFAULT_VEHICLE_CAP).forEach(k=>{
+        remainingVehiclesSample += getVehicleRemainingCount('safari', sampleDate, sampleSlot, k);
+        remainingSeatsSample += getVehicleRemainingSeats('safari', sampleDate, sampleSlot, k);
+      });
+      totalsEl.innerHTML = `Total vehicles: ${totalVehicles}<br/>Total seats: ${totalSeats}<br/>Remaining vehicles (sample): ${remainingVehiclesSample}<br/>Remaining seats (sample): ${remainingSeatsSample}`;
+    }
+  }
+
+  /********** SMS Log rendering + delete (new) **********/
+  function renderSmsLog(){
+    const arr = JSON.parse(localStorage.getItem(LS_SMS_LOG) || '[]');
+    const el = qs('#smsLog'); if(!el) return;
+    const countEl = qs('#smsCount');
+    if(!arr.length){
+      el.innerHTML = '<div class="muted small">No demo SMS sent</div>';
+      if(countEl) countEl.textContent = 'Sent: 0';
+      return;
+    }
+    if(countEl) countEl.textContent = `Sent: ${arr.length}`;
+    // build list with delete buttons
+    el.innerHTML = '';
+    arr.slice(0,50).forEach(s=>{
+      const row = document.createElement('div'); row.className='sms-item';
+      const left = document.createElement('div'); left.style.flex='1';
+      left.innerHTML = `<div><strong>${s.to}</strong> • <span class="sms-meta">${new Date(s.ts).toLocaleString()}</span></div><div class="small">${s.msg}</div>`;
+      const actions = document.createElement('div');
+      const del = document.createElement('button'); del.className='btn ghost'; del.textContent='Delete';
+      del.addEventListener('click', ()=>{ if(!confirm('Delete this SMS log?')) return; deleteSmsById(s.id); });
+      actions.appendChild(del);
+      row.appendChild(left); row.appendChild(actions);
+      el.appendChild(row);
+    });
+  }
+
+  function deleteSmsById(id){
+    let arr = JSON.parse(localStorage.getItem(LS_SMS_LOG) || '[]');
+    arr = arr.filter(x=> x.id !== id);
+    localStorage.setItem(LS_SMS_LOG, JSON.stringify(arr));
+    toast('Deleted SMS');
+    renderSmsLog();
+  }
+
+  function clearSmsLog(){
+    if(!confirm('Clear entire SMS demo log?')) return;
+    localStorage.removeItem(LS_SMS_LOG);
+    toast('SMS log cleared');
+    renderSmsLog();
+  }
+
+  /********** QR scanner for admin verify (unchanged) **********/
+  let scannerStream = null, scanning=false;
+  async function startScanner(){
+    try{
+      const sm = qs('#scannerModal'); if(sm) sm.style.display='flex';
+      scannerStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+      const video = qs('#qrVideo'); if(video){ video.srcObject = scannerStream; await video.play(); scanning=true; requestAnimationFrame(scanLoop); }
+    } catch(e){ toast('Camera unavailable'); }
+  }
+  function stopScanner(){ scanning=false; const sm = qs('#scannerModal'); if(sm) sm.style.display='none'; if(scannerStream){ scannerStream.getTracks().forEach(t=>t.stop()); scannerStream=null; } }
+  async function scanLoop(){
+    if(!scanning) return;
+    if('BarcodeDetector' in window){
+      try{
+        const bd = new BarcodeDetector({formats:['qr_code']});
+        const video = qs('#qrVideo');
+        if(video){
+          const bitmap = await createImageBitmap(video);
+          const det = await bd.detect(bitmap);
+          if(det && det.length){ handleScannedCode(det[0].rawValue); stopScanner(); return; }
+        }
+      } catch(e){}
+    }
+    requestAnimationFrame(scanLoop);
+  }
+
+  function handleScannedCode(code){
+    const arr = load(LS.BOOKINGS);
+    const found = arr.find(b=>b.id===code);
+    if(found){
+      if(confirm('VALID: '+found.id + '\nMark used?')){
+        found.used=true; save(LS.BOOKINGS, arr); toast('Marked used: ' + found.id); renderRecent(); updateStats(); renderAdminSummary();
+      } else alert('Ticket valid (not marked used)');
+    } else alert('INVALID');
+  }
+
+  /********** Admin complaints manager (unchanged) **********/
+  function renderAdmin(){
+    renderAdminSummary();
+    renderSmsLog();
+    const cont = qs('#adminArea');
+    if(!cont) return;
+    cont.innerHTML='';
+    const comps = load(LS.COMPLAINTS);
+    if(!comps.length){ cont.innerHTML = '<div class="muted small">No complaints</div>'; return; }
+    comps.forEach(c=>{
+      const d = document.createElement('div'); d.className='card'; d.style.marginBottom='8px';
+      d.innerHTML = `<strong>${c.type}</strong> <div class="muted small">${new Date(c.ts).toLocaleString()} • ${c.resolved? 'Resolved':'Open'}</div><div style="margin-top:8px">${c.desc}</div><div style="margin-top:8px">${c.photoData? `<img src="${c.photoData}" style="max-width:240px;border-radius:6px;display:block;margin-top:8px">` : ''}</div><div style="margin-top:8px"><button class="btn" data-id="${c.id}">${c.resolved? 'Reopen':'Mark Resolved'}</button> <button class="btn" data-dl="${c.id}">Download</button> <button class="btn" data-del="${c.id}">Delete</button></div>`;
+      cont.appendChild(d);
+    });
+
+    cont.querySelectorAll('[data-id]').forEach(b=> b.addEventListener('click', ev=>{
+      const id = ev.target.dataset.id; toggleResolved(id); renderAdmin(); renderComplaints();
+    }));
+    cont.querySelectorAll('[data-dl]').forEach(b=> b.addEventListener('click', ev=>{
+      const id = ev.target.dataset.dl;
+      const c = load(LS.COMPLAINTS).find(x=>x.id===id);
+      if(c){ const { jsPDF } = window.jspdf; const pdf = new jsPDF({unit:'pt',format:'a4'}); pdf.text('Complaint '+c.id,40,40); pdf.text(pdf.splitTextToSize(c.desc,520),40,70); pdf.save('complaint_'+c.id+'.pdf'); }
+    }));
+    cont.querySelectorAll('[data-del]').forEach(b=> b.addEventListener('click', ev=>{
+      const id = ev.target.dataset.del; if(!confirm('Delete?')) return; let arr = load(LS.COMPLAINTS); arr = arr.filter(x=>x.id!==id); save(LS.COMPLAINTS,arr); renderAdmin(); renderComplaints();
+    }));
+  }
+
+  function toggleResolved(id){
+    const arr = load(LS.COMPLAINTS);
+    const idx = arr.findIndex(x=>x.id===id); if(idx===-1) return;
+    arr[idx].resolved = !arr[idx].resolved; save(LS.COMPLAINTS, arr); toast('Toggled resolved'); renderComplaints();
+  }
+
+  /********** Image manager (unchanged) **********/
+  function dataURLFromFile(file){ return new Promise((res, rej)=>{ const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+  async function saveLogo(){ const f = qs('#uploadLogo').files[0]; if(!f) return toast('Select a logo file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.LOGO, data); applySiteImages(); toast('Logo saved'); }
+  async function saveHero(){ const f = qs('#uploadHero').files[0]; if(!f) return toast('Select a hero file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.HERO, data); applySiteImages(); toast('Hero saved'); }
+  async function saveMap(){ const f = qs('#uploadMap').files[0]; if(!f) return toast('Select a map file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.MAP, data); applySiteImages(); toast('Map saved'); }
+
+  function applySiteImages(){
+    const logoEls = document.querySelectorAll('img[data-site="logo"]');
+    const heroEls = document.querySelectorAll('img[data-site="hero"]');
+    const logoData = localStorage.getItem(SITE_LS.LOGO);
+    const heroData = localStorage.getItem(SITE_LS.HERO);
+    const mapData  = localStorage.getItem(SITE_LS.MAP);
+    if(logoData){ logoEls.forEach(el=>el.src = logoData); if(qs('#previewLogo')){ qs('#previewLogo').src=logoData; qs('#previewLogo').style.display='block'; } } else if(qs('#previewLogo')) qs('#previewLogo').style.display='none';
+    if(heroData){ heroEls.forEach(el=>el.src = heroData); if(qs('#previewHero')){ qs('#previewHero').src=heroData; qs('#previewHero').style.display='block'; } } else if(qs('#previewHero')) qs('#previewHero').style.display='none';
+    if(mapData && qs('#previewMap')){ qs('#previewMap').src=mapData; qs('#previewMap').style.display='block'; } else if(qs('#previewMap')) qs('#previewMap').style.display='none';
+    if(qs('#downloadLogoBtn')) qs('#downloadLogoBtn').disabled = !logoData;
+    if(qs('#downloadHeroBtn')) qs('#downloadHeroBtn').disabled = !heroData;
+    if(qs('#downloadMapBtn'))  qs('#downloadMapBtn').disabled  = !mapData;
+  }
+
+  /********** Stats & init **********/
+  function updateStats(){ qs('#statBookings').textContent = load(LS.BOOKINGS).length; qs('#statPhotos').textContent = load(LS.PHOTOS).length; qs('#statComplaints').textContent = load(LS.COMPLAINTS).length; }
+
+  /********** Complaint registration (unchanged) **********/
+  // complaint form wiring in initAll
+
+  
+
+  /********** Init wiring (updated to wire viewMode + SMS delete) **********/
+  function isAdminUnlocked(){ return sessionStorage.getItem('bbp_admin') === '1'; }
+  function setAdminUnlocked(v){ sessionStorage.setItem('bbp_admin', v ? '1':'0'); }
+function applyViewMode(mode){
+  if(mode === 'desktop'){
+    document.documentElement.setAttribute('data-view','desktop');
+    localStorage.setItem('bbp_view','desktop');
+    qs('#viewToggleBtn').textContent = 'Switch to Mobile';
+  } else {
+    document.documentElement.removeAttribute('data-view');
+    localStorage.removeItem('bbp_view');
+    qs('#viewToggleBtn').textContent = 'Switch to Desktop';
+  }
+}
+
+function initViewToggle(){
+  const btn = qs('#viewToggleBtn');
+  if(!btn) return;
+
+  const isMobile = window.matchMedia('(max-width:980px)').matches;
+  if(isMobile) btn.style.display = 'block';
+
+  const saved = localStorage.getItem('bbp_view');
+  if(saved === 'desktop') applyViewMode('desktop');
+
+  btn.addEventListener('click', ()=>{
+    const forced = document.documentElement.getAttribute('data-view') === 'desktop';
+    applyViewMode(forced ? 'auto' : 'desktop');
+  });
+}
+  function initAll(){
+    qs('#year').textContent = new Date().getFullYear();
+
+    // nav
+    qsa('.nav button').forEach(btn=> btn.addEventListener('click', ()=>{
+      qsa('.nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const to = btn.dataset.to;
+      qsa('.pane').forEach(p=>p.style.display='none');
+      const el = qs('#'+to);
+      if(el) el.style.display='block';
+    }));
+
+    // Slot modal open/close and date navigation
+    qs('#closeSlotModal')?.addEventListener('click', ()=> qs('#slotModal').style.display='none');
+    qs('#prevWeek')?.addEventListener('click', ()=> { slotState.currentWeekStart = addDays(slotState.currentWeekStart, -7); renderDateRow(); loadSlotsToModal(); });
+    qs('#nextWeek')?.addEventListener('click', ()=> { slotState.currentWeekStart = addDays(slotState.currentWeekStart, 7); renderDateRow(); loadSlotsToModal(); });
+    qs('#refreshSlotsBtn')?.addEventListener('click', loadSlotsToModal);
+    qs('#slotModalAttraction')?.addEventListener('change', loadSlotsToModal);
+
+    // booking UI wiring
+    renderSlotOptions(qs('#attraction')?.value || 'safari');
+    qs('#attraction')?.addEventListener('change', ()=> { const a = qs('#attraction').value; if(qs('#vehicleWrap')) qs('#vehicleWrap').style.display = a==='safari' ? 'block' : 'none'; renderSlotOptions(a); updatePreview(); });
+    ['#vehicle','#qty','#date','#slot','#mobile','#name','#email'].forEach(sel=>{ const el = qs(sel); if(el) el.addEventListener('input', updatePreview); });
+    qs('#bookingForm')?.addEventListener('submit', bookSubmitHandler);
+
+    qs('#heroBookBtn')?.addEventListener('click', ()=> { if(qs('#heroBookSelect')) qs('#attraction').value = qs('#heroBookSelect').value; renderSlotOptions(qs('#attraction').value); qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="booking"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#booking').style.display='block'; updatePreview(); });
+    qs('#viewSlotsBtn')?.addEventListener('click', ()=>{ slotState.selectedDate = isoDate(new Date()); slotState.currentWeekStart = startOfWeek(new Date()); renderDateRow(); qs('#slotModalAttraction').value = qs('#heroBookSelect').value || 'safari'; loadSlotsToModal(); qs('#slotModal').style.display='flex'; });
+
+    // gallery
+    qs('#photoForm')?.addEventListener('submit', (e)=>{ e.preventDefault(); const files = Array.from(qs('#photoUploader').files || []); if(!files.length) return toast('Select photos'); const arr = load(LS.PHOTOS); let done=0; files.forEach(f=>{ const fr=new FileReader(); fr.onload = ev => { arr.unshift({name:f.name,data:ev.target.result,ts:new Date().toISOString()}); done++; if(done===files.length){ save(LS.PHOTOS,arr); toast('Uploaded'); renderGallery(); } }; fr.readAsDataURL(f); })});
+    qs('#clearGallery')?.addEventListener('click', ()=>{ if(confirm('Clear gallery?')){ localStorage.removeItem(LS.PHOTOS); renderGallery(); }});
+
+    // complaints (client)
+    qs('#complaintForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); const name=qs('#cName').value.trim(); const contact=qs('#cContact').value.trim(); const type=qs('#cType').value; const desc=qs('#cDesc').value.trim(); if(!desc) return toast('Describe incident'); const file = qs('#cPhoto').files[0]; let photoData=null; if(file) photoData = await new Promise(r=>{ const fr=new FileReader(); fr.onload=ev=>r(ev.target.result); fr.readAsDataURL(file); }); const rec = { id:'CP'+Date.now(), name, contact, type, desc, photoData, ts:new Date().toISOString(), resolved:false }; const arr = load(LS.COMPLAINTS); arr.unshift(rec); save(LS.COMPLAINTS,arr); toast('Complaint registered'); renderComplaints(); renderAdmin(); });
+
+    // admin unlock
+    qs('#adminBtn')?.addEventListener('click', ()=>{ const pwd = prompt('Admin password (demo):'); if(pwd==='admin123'){ setAdminUnlocked(true); qs('#adminTabBtn').style.display='inline-block'; qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="admin"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#admin').style.display='block'; renderAdmin(); toast('Admin unlocked'); } else toast('Wrong password'); });
+
+    // inventory manager wiring
+    qs('#invAttraction')?.addEventListener('change', renderInventorySlotOptions);
+    qs('#loadInvBtn')?.addEventListener('click', loadInventoryToEditor);
+    qs('#saveInvBtn')?.addEventListener('click', saveInventoryFromEditor);
+    qs('#resetInvBtn')?.addEventListener('click', resetInventoryForSelection);
+    renderInventorySlotOptions();
+
+    // image manager wiring
+    qs('#saveLogoBtn')?.addEventListener('click', ()=> saveLogo());
+    qs('#saveHeroBtn')?.addEventListener('click', ()=> saveHero());
+    qs('#saveMapBtn')?.addEventListener('click', ()=> saveMap());
+    qs('#downloadLogoBtn')?.addEventListener('click', ()=> { const d = localStorage.getItem(SITE_LS.LOGO); if(!d) return toast('No logo'); const a=document.createElement('a'); a.href=d; a.download='logo.png'; document.body.appendChild(a); a.click(); a.remove(); });
+    qs('#downloadHeroBtn')?.addEventListener('click', ()=> { const d = localStorage.getItem(SITE_LS.HERO); if(!d) return toast('No hero'); const a=document.createElement('a'); a.href=d; a.download='hero.jpg'; document.body.appendChild(a); a.click(); a.remove(); });
+    qs('#downloadMapBtn')?.addEventListener('click', ()=> { const d = localStorage.getItem(SITE_LS.MAP); if(!d) return toast('No map'); const a=document.createElement('a'); a.href=d; a.download='map.jpg'; document.body.appendChild(a); a.click(); a.remove(); });
+    qs('#resetLogoBtn')?.addEventListener('click', ()=>{ localStorage.removeItem(SITE_LS.LOGO); applySiteImages(); toast('Logo reset'); });
+    qs('#resetHeroBtn')?.addEventListener('click', ()=>{ localStorage.removeItem(SITE_LS.HERO); applySiteImages(); toast('Hero reset'); });
+    qs('#resetMapBtn')?.addEventListener('click', ()=>{ localStorage.removeItem(SITE_LS.MAP); applySiteImages(); toast('Map reset'); });
+
+    // scanner
+    qs('#openScannerBtn')?.addEventListener('click', ()=> { if(isAdminUnlocked()){ qs('#scannerModal').style.display='flex'; startScanner(); } else { toast('Verify available in admin only'); } });
+    qs('#stopScan')?.addEventListener('click', ()=> stopScanner());
+    qs('#manualIdBtn')?.addEventListener('click', ()=> { const code = prompt('Enter booking ID to verify'); if(code) handleScannedCode(code); });
+
+    // theme/lang toggle
+    qs('#themeToggle')?.addEventListener('click', ()=> { const root = document.documentElement; const cur = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light'; root.setAttribute('data-theme', cur); });
+    qs('#lang')?.addEventListener('change', ()=> { const L = qs('#lang').value; const map = { en:{title:'Voices of the Wild',lead:'Explore Bannerghatta — book responsibly, share photos, and report concerns.'}, kn:{title:'ವಾಯ್ಸಸ್ ಆಫ್ ದ ವೈಲ್ಡ್',lead:'ಬ್ಯಾನರ್ಘಟ್ಟ — ಜವಾಬ್ದಾರಿಯಾಗಿ ಬುಕ್ ಮಾಡಿ, ಫೋಟೋಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳಿ.'}, hi:{title:'वॉइसेस ऑफ द वाइल्ड',lead:'बनरघट्टा — जिम्मेदारी से बुक करें, फोटो साझा करें.'} }; const m = map[L]||map.en; qs('.h-title').textContent = m.title; qs('.h-lead').textContent = m.lead; });
+
+    
+    // date defaults
+    qs('#date').value = isoDate(new Date());
+    qs('#invDate').value = isoDate(new Date());
+
+    // initial render
+    renderSlotOptions(qs('#attraction')?.value || 'safari');
+    renderDateRow();
+    loadSlotsToModal();
+    renderGallery();
+    renderComplaints();
+    renderRecent();
+    updateStats();
+    applySiteImages();
+    applyDefaultsToUI();
+    renderSmsLog();
+
+    // download confirm modal wiring
+    qs('#cancelDownload')?.addEventListener('click', hideDownloadConfirm);
+    qs('#confirmDownload')?.addEventListener('click', ()=> { if(!pendingDownloadBooking) return hideDownloadConfirm(); downloadTicketPDF(pendingDownloadBooking).then(()=>{ hideDownloadConfirm(); toast('Downloaded ticket for ' + pendingDownloadBooking.id); }); });
+
+    // Save defaults wiring
+    qs('#saveDefaultsBtn')?.addEventListener('click', saveDefaultVehicleTotalsFromUI);
+    qs('#resetDefaultsBtn')?.addEventListener('click', ()=> { if(!confirm('Reset default vehicle totals to built-ins?')) return; resetDefaultVehicleTotalsToBuiltins(); });
+
+    // SMS clear wiring (new)
+    qs('#clearSmsLogBtn')?.addEventListener('click', clearSmsLog);
+
+    // My Bookings quick view
+    qs('#myBookingsBtn')?.addEventListener('click', ()=> { qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="booking"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#booking').style.display='block'; renderRecent(); });
+
+initViewToggle();
+  }
+  window.addEventListener('load', initAll);
+  
+  </script>
+</body>
+</html>
