@@ -15,7 +15,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
   <!-- Barcode (CODE128) -->
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     :root{
       --bg:#071225; --panel:rgba(255,255,255,0.03); --muted:#9fb0c1; --accent1:#7c3aed; --accent2:#60a5fa;
@@ -440,6 +442,7 @@ html[data-view="desktop"] .slot-grid{
             <div style="flex:1">
               <h3>Totals</h3>
               <div id="adminTotals" class="muted small"></div>
+              <div id="adminFirestoreTotals" class="muted small" style="margin-top:6px"></div>
             </div>
             <div style="flex:0 0 260px">
               <h3>SMS Log (demo)</h3>
@@ -584,6 +587,19 @@ html[data-view="desktop"] .slot-grid{
     </main>
   </div>
     <script>
+   // ================= FIREBASE INIT =================
+const firebaseConfig = {
+  apiKey: "AIzaSyAX3yQG23MJorHRiF6keJUTIvjRwq2Yiw",
+  authDomain: "bannerghatta-voices.firebaseapp.com",
+  projectId: "bannerghatta-voices",
+  storageBucket: "bannerghatta-voices.appspot.com",
+  messagingSenderId: "611003539040",
+  appId: "1:611003539040:web:03360a9958f308f9f92d05"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// ===============================================
   /*********** CONFIG & STORAGE KEYS ***********/
   const LS_VERIFY_LOG = 'bbp_verify_log';
 
@@ -600,6 +616,30 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
   };
 
   const LS = { BOOKINGS:'bbp_bookings', PHOTOS:'bbp_photos', COMPLAINTS:'bbp_complaints', INVENTORY:'bbp_inventory' };
+  /*********** FIRESTORE HELPERS ***********/
+const BOOKINGS_COLLECTION = 'bookings';
+
+async function saveBookingToFirestore(booking){
+  await db.collection(BOOKINGS_COLLECTION)
+          .doc(booking.id)
+          .set(booking);
+}
+
+async function getAllBookingsFromFirestore(){
+  const snap = await db.collection(BOOKINGS_COLLECTION)
+                       .orderBy('ts', 'desc')
+                       .get();
+  return snap.docs.map(d => d.data());
+}
+
+async function getMyBookingsFromFirestore(deviceId){
+  const snap = await db.collection(BOOKINGS_COLLECTION)
+                       .where('deviceId','==',deviceId)
+                       .orderBy('ts','desc')
+                       .get();
+  return snap.docs.map(d => d.data());
+}
+/*********** END FIRESTORE HELPERS ***********/
   // ================= DEVICE IDENTIFIER =================
 const DEVICE_ID_KEY = 'bbp_device_id';
 
@@ -1052,7 +1092,19 @@ if(!isValidEmail(email)) return toast('Enter a valid email address');
   ts: new Date().toISOString(),
   used: false
 };
-    const arr = load(LS.BOOKINGS); arr.unshift(booking); save(LS.BOOKINGS, arr);
+    // 1️⃣ Save locally (device)
+const arr = load(LS.BOOKINGS);
+arr.unshift(booking);
+save(LS.BOOKINGS, arr);
+
+// 2️⃣ Save globally (Firestore)
+saveBookingToFirestore(booking)
+  .then(() => {
+    console.log('Booking saved to Firestore');
+  })
+  .catch(err => {
+    console.error('Firestore save failed', err);
+  });
 
     if(mobile){
       const smsLog = JSON.parse(localStorage.getItem(LS_SMS_LOG) || '[]');
@@ -1092,64 +1144,87 @@ if(!isValidEmail(email)) return toast('Enter a valid email address');
   }
   function hideDownloadConfirm(){ pendingDownloadBooking = null; qs('#downloadConfirmModal').style.display='none'; }
 
-  function renderRecent(){
-    const container = qs('#recentBookings'); if(!container) return;
-    container.innerHTML='';
-    const arr = load(LS.BOOKINGS).filter(b => b.deviceId === DEVICE_ID);
-    if(!arr.length){ container.innerHTML = '<div class="muted small">No bookings yet</div>'; return; }
-    arr.slice(0,2).forEach(b=>{
-      const row = document.createElement('div'); row.className='recent-item';
-      const left = document.createElement('div');
-      left.innerHTML = `<strong>${b.id}</strong> <div class="muted small">${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}</div>`;
-      if(b.used){ const badge = document.createElement('span'); badge.className='badge-used'; badge.textContent='USED'; left.appendChild(badge); }
-      const actions = document.createElement('div');
+  async function renderRecent(){
+  const container = qs('#recentBookings');
+  if(!container) return;
 
-      const dlBtn = document.createElement('button'); dlBtn.className='btn'; dlBtn.textContent='Download';
-      dlBtn.addEventListener('click', ()=> showDownloadConfirm(b));
+  const arr = await getMyBookingsFromFirestore(DEVICE_ID);
 
-      const cancelBtn = document.createElement('button'); cancelBtn.className='btn ghost'; cancelBtn.textContent='Cancel';
-      cancelBtn.addEventListener('click', ()=> {
-        if(!confirm(`Cancel booking ${b.id}? This will free the seats.`)) return;
-        cancelBooking(b.id);
-      });
-
-      const delBtn = document.createElement('button'); delBtn.className='btn ghost'; delBtn.textContent='Delete';
-      delBtn.addEventListener('click', ()=> {
-        if(!confirm(`Delete booking ${b.id}? This cannot be undone.`)) return;
-        deleteBooking(b.id);
-      });
-
-      actions.appendChild(dlBtn);
-      actions.appendChild(cancelBtn);
-      actions.appendChild(delBtn);
-      row.appendChild(left); row.appendChild(actions);
-      container.appendChild(row);
-    });
+  container.innerHTML = '';
+  if(!arr.length){
+    container.innerHTML = '<div class="muted small">No bookings yet</div>';
+    return;
   }
 
-  function cancelBooking(id){
-    let arr = load(LS.BOOKINGS);
-    const idx = arr.findIndex(x=>x.id===id);
-    if(idx===-1) return toast('Booking not found');
-    const [removed] = arr.splice(idx,1);
-    save(LS.BOOKINGS, arr);
-    toast('Cancelled ' + id);
-    renderRecent();
-    updateStats();
-    renderAdminSummary();
+  arr.slice(0,2).forEach(b=>{
+    const row = document.createElement('div');
+    row.className = 'recent-item';
+
+    const left = document.createElement('div');
+    left.innerHTML = `
+      <strong>${b.id}</strong>
+      <div class="muted small">${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}</div>
+      ${b.used ? '<span class="badge-used">USED</span>' : ''}
+    `;
+
+    const actions = document.createElement('div');
+
+    const dlBtn = document.createElement('button');
+    dlBtn.className = 'btn';
+    dlBtn.textContent = 'Download';
+    dlBtn.onclick = ()=> showDownloadConfirm(b);
+
+    actions.appendChild(dlBtn);
+    row.appendChild(left);
+    row.appendChild(actions);
+    container.appendChild(row);
+  });
+}
+    
+    
+
+
+  async function cancelBooking(id){
+  let arr = load(LS.BOOKINGS);
+  const idx = arr.findIndex(x=>x.id===id);
+  if(idx===-1) return toast('Booking not found');
+
+  arr.splice(idx,1);
+  save(LS.BOOKINGS, arr);
+
+  try{
+    await db.collection(BOOKINGS_COLLECTION).doc(id).delete();
+  }catch(e){
+    console.warn('Firestore delete failed (demo ok)', e);
   }
 
-  function deleteBooking(id){
-    let arr = load(LS.BOOKINGS);
-    const exists = arr.some(x=>x.id===id);
-    if(!exists){ toast('Booking not found'); return; }
-    arr = arr.filter(x=>x.id !== id);
-    save(LS.BOOKINGS, arr);
-    toast('Deleted ' + id);
-    renderRecent();
-    updateStats();
-    renderAdminSummary();
+  toast('Cancelled ' + id);
+  renderRecent();
+  updateStats();
+  renderAdminSummary();
+}
+
+  async function deleteBooking(id){
+  let arr = load(LS.BOOKINGS);
+  if(!arr.some(x=>x.id===id)){
+    toast('Booking not found');
+    return;
   }
+
+  arr = arr.filter(x=>x.id !== id);
+  save(LS.BOOKINGS, arr);
+
+  try{
+    await db.collection(BOOKINGS_COLLECTION).doc(id).delete();
+  }catch(e){
+    console.warn('Firestore delete failed (demo ok)', e);
+  }
+
+  toast('Deleted ' + id);
+  renderRecent();
+  updateStats();
+  renderAdminSummary();
+}
 
   /********** Admin inventory editor (unchanged) **********/
   function renderInventorySlotOptions(){
@@ -1406,44 +1481,53 @@ async function scanLoop(){
   }
   requestAnimationFrame(scanLoop);
 }
-function handleScannedCode(code){
-  const bookings = load(LS.BOOKINGS);
-  const log = JSON.parse(localStorage.getItem(LS_VERIFY_LOG) || '[]');
+async function handleScannedCode(code){
   const statusEl = qs('#verifyStatus');
+  const log = JSON.parse(localStorage.getItem(LS_VERIFY_LOG) || '[]');
 
-  const found = bookings.find(b => b.id === code);
+  try{
+    const docRef = db.collection(BOOKINGS_COLLECTION).doc(code);
+    const snap = await docRef.get();
 
-  if(!found){
-    beepError.play();
-    statusEl.textContent = '❌ Invalid Ticket';
-    log.unshift({ id:code, status:'INVALID', ts:new Date().toISOString() });
+    if(!snap.exists){
+      beepError.play();
+      statusEl.textContent = '❌ Invalid Ticket';
+      log.unshift({ id:code, status:'INVALID', ts:new Date().toISOString() });
+      localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
+      renderVerifyLog();
+      return;
+    }
+
+    const booking = snap.data();
+
+    if(booking.used){
+      beepError.play();
+      statusEl.textContent = '⚠️ Already Used';
+      log.unshift({ id:code, status:'ALREADY USED', ts:new Date().toISOString() });
+      localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
+      renderVerifyLog();
+      return;
+    }
+
+    // ✅ Mark used in Firestore
+    await docRef.update({ used:true });
+
+    beepSuccess.play();
+    statusEl.textContent = '✅ Verified & Marked Used';
+
+    log.unshift({ id:code, status:'VERIFIED', ts:new Date().toISOString() });
     localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
     renderVerifyLog();
-    return;
+
+    renderRecent(); // refresh client view if same device
+    updateStats();
+
+  }catch(err){
+    console.error(err);
+    toast('Verification error');
   }
-
-  if(found.used){
-    beepError.play();
-    statusEl.textContent = '⚠️ Already Used';
-    log.unshift({ id:code, status:'ALREADY USED', ts:new Date().toISOString() });
-    localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
-    renderVerifyLog();
-    return;
-  }
-
-  found.used = true;
-  save(LS.BOOKINGS, bookings);
-
-  beepSuccess.play();
-  statusEl.textContent = '✅ Verified & Marked Used';
-
-  log.unshift({ id:code, status:'VERIFIED', ts:new Date().toISOString() });
-  localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
-
-  renderVerifyLog();
-  renderRecent();
-  updateStats();
 }
+  
   /********** Admin complaints manager (unchanged) **********/
   function renderAdmin(){
     renderAdminSummary();
@@ -1536,6 +1620,20 @@ function initViewToggle(){
     applyViewMode(forced ? 'auto' : 'desktop');
   });
 }
+async function renderAdminFromFirestore(){
+  if(!isAdminUnlocked()) return;
+
+  const bookings = await getAllBookingsFromFirestore();
+  const area = qs('#adminFirestoreTotals');
+
+  if(!area) return;
+
+  area.innerHTML = `
+    <strong>Total bookings:</strong> ${bookings.length}<br/>
+    <strong>Used tickets:</strong> ${bookings.filter(b=>b.used).length}<br/>
+    <strong>Unused tickets:</strong> ${bookings.filter(b=>!b.used).length}
+  `;
+}
   function initAll(){
     qs('#year').textContent = new Date().getFullYear();
 
@@ -1573,7 +1671,7 @@ function initViewToggle(){
     qs('#complaintForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); const name=qs('#cName').value.trim(); const contact=qs('#cContact').value.trim(); const type=qs('#cType').value; const desc=qs('#cDesc').value.trim(); if(!desc) return toast('Describe incident'); const file = qs('#cPhoto').files[0]; let photoData=null; if(file) photoData = await new Promise(r=>{ const fr=new FileReader(); fr.onload=ev=>r(ev.target.result); fr.readAsDataURL(file); }); const rec = { id:'CP'+Date.now(), name, contact, type, desc, photoData, ts:new Date().toISOString(), resolved:false }; const arr = load(LS.COMPLAINTS); arr.unshift(rec); save(LS.COMPLAINTS,arr); toast('Complaint registered'); renderComplaints(); renderAdmin(); });
 
     // admin unlock
-    qs('#adminBtn')?.addEventListener('click', ()=>{ const pwd = prompt('Admin password (demo):'); if(pwd==='admin123'){ setAdminUnlocked(true); qs('#adminTabBtn').style.display='inline-block'; qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="admin"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#admin').style.display='block'; renderAdmin(); toast('Admin unlocked'); } else toast('Wrong password'); });
+    qs('#adminBtn')?.addEventListener('click', ()=>{ const pwd = prompt('Admin password (demo):'); if(pwd==='admin123'){ setAdminUnlocked(true); qs('#adminTabBtn').style.display='inline-block'; qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="admin"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#admin').style.display='block'; renderAdmin(); renderAdminFromFirestore();toast('Admin unlocked'); } else toast('Wrong password'); });
 
     // inventory manager wiring
     qs('#invAttraction')?.addEventListener('change', renderInventorySlotOptions);
@@ -1650,7 +1748,7 @@ renderVerifyLog();
     // SMS clear wiring (new)
     qs('#clearSmsLogBtn')?.addEventListener('click', clearSmsLog);
 
-    
+    // My Bookings quick view
     // My Bookings quick view (FIXED)
 qs('#myBookingsBtn')?.addEventListener('click', ()=>{
   // Switch to booking tab
