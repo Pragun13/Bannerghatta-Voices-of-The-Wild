@@ -206,7 +206,7 @@ html[data-view="desktop"] .slot-grid{
           <form id="bookingForm" class="card">
             <div class="form-grid">
               <label>Name<input id="name" required placeholder="Full name"></label>
-              <label>Mobile<input id="mobile" placeholder="+91XXXXXXXXXX"></label>
+              <input id="mobile" type="tel" placeholder="+91XXXXXXXXXX">
               <label>Email<input id="email" type="email" placeholder="you@example.com"></label>
 
               <label>Attraction
@@ -600,6 +600,20 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
   };
 
   const LS = { BOOKINGS:'bbp_bookings', PHOTOS:'bbp_photos', COMPLAINTS:'bbp_complaints', INVENTORY:'bbp_inventory' };
+  // ================= DEVICE IDENTIFIER =================
+const DEVICE_ID_KEY = 'bbp_device_id';
+
+function getDeviceId(){
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if(!id){
+    id = 'DEV-' + Math.random().toString(36).slice(2) + Date.now();
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+const DEVICE_ID = getDeviceId();
+// =====================================================
   const SITE_LS = { LOGO:'site_logo', HERO:'site_hero', MAP:'site_map' };
   const LS_DEFAULTS_KEY = 'bbp_defaults';
   const LS_SMS_LOG = 'bbp_sms_log';
@@ -990,13 +1004,26 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
       alert('Unable to create ticket PDF: ' + (err && err.message ? err.message : String(err)));
     }
   }
+// ================= VALIDATION HELPERS =================
+function isValidEmail(email){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
+function isValidIndianMobile(mobile){
+  return /^(\+91)?[6-9]\d{9}$/.test(mobile);
+}
+// ======================================================
   /********** BOOKING submit + auto-update inventory (unchanged) **********/
   function bookSubmitHandler(ev){
     ev.preventDefault();
     const name = (qs('#name')||{}).value.trim(); if(!name) return toast('Enter name');
     const mobile = (qs('#mobile')||{}).value.trim();
     const email = (qs('#email')||{}).value.trim();
+    if(!mobile) return toast('Mobile number is required');
+if(!isValidIndianMobile(mobile)) return toast('Enter a valid Indian mobile number');
+
+if(!email) return toast('Email is required');
+if(!isValidEmail(email)) return toast('Enter a valid email address');
     const attraction = (qs('#attraction')||{}).value || 'safari';
     const vehicle = qs('#vehicle') ? qs('#vehicle').value : '';
     const date = (qs('#date')||{}).value; if(!date) return toast('Choose date');
@@ -1011,7 +1038,20 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
       if(qty > rem) return toast('Not enough seats for this slot. Remaining: '+ rem);
     }
 
-    const booking = { id:'BK'+Date.now(), name, mobile, email, attraction, vehicle, date, slot, qty, ts:new Date().toISOString(), used:false };
+    const booking = {
+  id: 'BK' + Date.now(),
+  deviceId: DEVICE_ID,   // ← ADD THIS
+  name,
+  mobile,
+  email,
+  attraction,
+  vehicle,
+  date,
+  slot,
+  qty,
+  ts: new Date().toISOString(),
+  used: false
+};
     const arr = load(LS.BOOKINGS); arr.unshift(booking); save(LS.BOOKINGS, arr);
 
     if(mobile){
@@ -1055,9 +1095,9 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
   function renderRecent(){
     const container = qs('#recentBookings'); if(!container) return;
     container.innerHTML='';
-    const arr = load(LS.BOOKINGS);
+    const arr = load(LS.BOOKINGS).filter(b => b.deviceId === DEVICE_ID);
     if(!arr.length){ container.innerHTML = '<div class="muted small">No bookings yet</div>'; return; }
-    arr.slice(0,12).forEach(b=>{
+    arr.slice(0,2).forEach(b=>{
       const row = document.createElement('div'); row.className='recent-item';
       const left = document.createElement('div');
       left.innerHTML = `<strong>${b.id}</strong> <div class="muted small">${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}</div>`;
