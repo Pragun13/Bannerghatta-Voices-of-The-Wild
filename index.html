@@ -1650,9 +1650,29 @@ renderVerifyLog();
     // SMS clear wiring (new)
     qs('#clearSmsLogBtn')?.addEventListener('click', clearSmsLog);
 
-    // My Bookings quick view
-    qs('#myBookingsBtn')?.addEventListener('click', ()=> { qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="booking"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#booking').style.display='block'; renderRecent(); });
+    
+    // My Bookings quick view (FIXED)
+qs('#myBookingsBtn')?.addEventListener('click', ()=>{
+  // Switch to booking tab
+  qsa('.nav button').forEach(b=>b.classList.remove('active'));
+  const bookingBtn = qs('.nav button[data-to="booking"]');
+  if(bookingBtn) bookingBtn.classList.add('active');
 
+  qsa('.pane').forEach(p=>p.style.display='none');
+  qs('#booking').style.display='block';
+
+  // Refresh data
+  renderRecent();
+  updatePreview();
+
+  // Scroll to recent bookings (IMPORTANT UX FIX)
+  const recentEl = qs('#recentBookings');
+  if(recentEl){
+    recentEl.scrollIntoView({ behavior:'smooth', block:'start' });
+  }
+
+  toast('Showing your recent bookings');
+});
 initViewToggle();
   }
   window.addEventListener('load', initAll);
