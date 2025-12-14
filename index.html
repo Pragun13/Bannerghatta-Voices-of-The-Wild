@@ -310,6 +310,21 @@ html[data-view="desktop"] .slot-grid{
 
           <aside class="card">
             <h3>Booking Preview</h3>
+            <!-- Booking Filters -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+  <input id="filterDate" type="date"
+    style="padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+
+  <select id="filterAttraction"
+    style="padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+    <option value="">All Attractions</option>
+    <option value="safari">Safari</option>
+    <option value="zoo">Zoo</option>
+    <option value="butterfly">Butterfly Park</option>
+  </select>
+
+  <button id="clearFiltersBtn" class="btn ghost">Clear</button>
+</div>
             <p><strong>Attraction:</strong> <span id="pAttraction">-</span></p>
             <p><strong>Vehicle:</strong> <span id="pVehicle">-</span></p>
             <p><strong>Date:</strong> <span id="pDate">-</span></p>
@@ -1237,12 +1252,20 @@ saveBookingToFirestore(booking)
     container.innerHTML = '<div class="muted small">No bookings yet</div>';
     return;
   }
+const fDate = qs('#filterDate')?.value || '';
+const fAttr = qs('#filterAttraction')?.value || '';
 
-  // Always show latest first
-  arr
-    .sort((a,b) => (b.ts || 0) - (a.ts || 0))
-    .slice(0,2)
-    .forEach(b=>{
+arr = arr.filter(b=>{
+  if(fDate && b.date !== fDate) return false;
+  if(fAttr && b.attraction !== fAttr) return false;
+  return true;
+});
+  // Latest first + only 2
+arr
+  .sort((a,b) => (b.ts || 0) - (a.ts || 0))
+  .slice(0,2)
+  .forEach(b=>{
+  
       const row = document.createElement('div');
       row.className = 'recent-item';
 
@@ -1921,6 +1944,16 @@ qs('#myBookingsBtn')?.addEventListener('click', ()=>{
   }
 
   toast('Showing your recent bookings');
+});
+// Booking filters wiring
+qs('#filterDate')?.addEventListener('change', renderRecent);
+qs('#filterAttraction')?.addEventListener('change', renderRecent);
+
+qs('#clearFiltersBtn')?.addEventListener('click', ()=>{
+  if(qs('#filterDate')) qs('#filterDate').value = '';
+  if(qs('#filterAttraction')) qs('#filterAttraction').value = '';
+  renderRecent();
+  toast('Filters cleared');
 });
 initViewToggle();
   }
