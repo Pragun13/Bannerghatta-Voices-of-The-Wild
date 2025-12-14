@@ -208,9 +208,24 @@ html[data-view="desktop"] .slot-grid{
           <form id="bookingForm" class="card">
             <div class="form-grid">
               <label>Name<input id="name" required placeholder="Full name"></label>
-              <input id="mobile" type="tel" placeholder="+91XXXXXXXXXX">
-              <label>Email<input id="email" type="email" placeholder="you@example.com"></label>
+              <input
+  id="mobile"
+  type="tel"
+  placeholder="+91XXXXXXXXXX"
+  required
+  pattern="(\+91)?[6-9]\d{9}"
+  title="Enter a valid Indian mobile number"
+/>
 
+<label>
+  Email
+  <input
+    id="email"
+    type="email"
+    placeholder="you@example.com"
+    required
+  >
+</label>
               <label>Attraction
                 <select id="attraction">
                   <option value="safari">Safari</option>
@@ -634,9 +649,10 @@ async function getAllBookingsFromFirestore(){
 
 async function getMyBookingsFromFirestore(deviceId){
   const snap = await db.collection(BOOKINGS_COLLECTION)
-                       .where('deviceId','==',deviceId)
-                       .orderBy('ts','desc')
-                       .get();
+    .where('deviceId', '==', deviceId)
+    .orderBy('ts', 'desc')
+    .get();
+
   return snap.docs.map(d => d.data());
 }
 /*********** END FIRESTORE HELPERS ***********/
@@ -1089,7 +1105,7 @@ if(!isValidEmail(email)) return toast('Enter a valid email address');
   date,
   slot,
   qty,
-  ts: new Date().toISOString(),
+  ts: Date.now(),
   used: false
 };
     // 1️⃣ Save locally (device)
@@ -1148,37 +1164,69 @@ saveBookingToFirestore(booking)
   const container = qs('#recentBookings');
   if(!container) return;
 
-  const arr = await getMyBookingsFromFirestore(DEVICE_ID);
+  let arr = [];
+
+  try{
+    // 1️⃣ Try Firestore (global + multi-device)
+    arr = await getMyBookingsFromFirestore(DEVICE_ID);
+  }catch(err){
+    console.warn('Firestore failed, using local fallback', err);
+
+    // 2️⃣ Fallback to localStorage (always works)
+    arr = load(LS.BOOKINGS).filter(b => b.deviceId === DEVICE_ID);
+  }
 
   container.innerHTML = '';
+
   if(!arr.length){
     container.innerHTML = '<div class="muted small">No bookings yet</div>';
     return;
   }
 
-  arr.slice(0,2).forEach(b=>{
-    const row = document.createElement('div');
-    row.className = 'recent-item';
+  // Always show latest first
+  arr
+    .sort((a,b) => (b.ts || 0) - (a.ts || 0))
+    .slice(0,2)
+    .forEach(b=>{
+      const row = document.createElement('div');
+      row.className = 'recent-item';
 
-    const left = document.createElement('div');
-    left.innerHTML = `
-      <strong>${b.id}</strong>
-      <div class="muted small">${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}</div>
-      ${b.used ? '<span class="badge-used">USED</span>' : ''}
-    `;
+      row.innerHTML = `
+  <div>
+    <strong>${b.id}</strong>
+    <div class="muted small">
+      ${b.attraction} • ${b.date} • ${b.slot} • x${b.qty}
+    </div>
+    ${b.used ? '<span class="badge-used">USED</span>' : ''}
+  </div>
 
-    const actions = document.createElement('div');
+  <div style="display:flex;gap:6px">
+    <button class="btn download-btn">Download</button>
+    ${!b.used ? `<button class="btn ghost cancel-btn">Cancel</button>` : ''}
+    <button class="btn ghost delete-btn">Delete</button>
+  </div>
+`;
 
-    const dlBtn = document.createElement('button');
-    dlBtn.className = 'btn';
-    dlBtn.textContent = 'Download';
-    dlBtn.onclick = ()=> showDownloadConfirm(b);
+     row.querySelector('.download-btn')
+  .onclick = () => showDownloadConfirm(b);
 
-    actions.appendChild(dlBtn);
-    row.appendChild(left);
-    row.appendChild(actions);
-    container.appendChild(row);
-  });
+const cancelBtn = row.querySelector('.cancel-btn');
+if(cancelBtn){
+  cancelBtn.onclick = () => {
+    if(confirm(`Cancel booking ${b.id}?`)){
+      cancelBooking(b.id);
+    }
+  };
+}
+
+row.querySelector('.delete-btn')
+  .onclick = () => {
+    if(confirm(`Delete booking ${b.id}?`)){
+      deleteBooking(b.id);
+    }
+  };
+      container.appendChild(row);
+    });
 }
     
     
