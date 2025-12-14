@@ -468,6 +468,12 @@ html[data-view="desktop"] .slot-grid{
             <!-- ADMIN -->
       <section id="admin" class="pane" style="display:none;margin-top:12px">
         <h2>Admin (Demo)</h2>
+        <!-- 🔴 CLEAR ALL BOOKINGS BUTTON (ADMIN ONLY) -->
+  <button class="btn ghost"
+    style="margin-top:10px;margin-bottom:12px"
+    onclick="deleteAllBookings()">
+    Clear All Bookings
+  </button>
 <!-- Verify Ticket (ADMIN ONLY) -->
 <div class="card" style="margin-top:12px">
   <h3>Verify Ticket</h3>
@@ -1324,6 +1330,38 @@ row.querySelector('.delete-btn')
   renderAdminSummary();
   renderAdminFromFirestore();
 }
+async function deleteAllBookings(){
+  if(!isAdminUnlocked()){
+    alert('Admin access required');
+    return;
+  }
+
+  if(!confirm('⚠️ This will permanently delete ALL bookings.\nAre you sure?')){
+    return;
+  }
+
+  try{
+    // 1️⃣ Clear localStorage bookings (this device)
+    localStorage.removeItem(LS.BOOKINGS);
+
+    // 2️⃣ Clear Firestore bookings (ALL devices)
+    const snap = await db.collection(BOOKINGS_COLLECTION).get();
+    const batch = db.batch();
+    snap.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    // 3️⃣ Refresh UI everywhere
+    renderRecent();
+    updateStats();
+    renderAdminSummary();
+    renderAdminFromFirestore();
+
+    toast('✅ All bookings cleared');
+  }catch(err){
+    console.error(err);
+    alert('Failed to clear bookings');
+  }
+}
 
   /********** Admin inventory editor (unchanged) **********/
   function renderInventorySlotOptions(){
@@ -1682,7 +1720,21 @@ renderAdminFromFirestore();
   }
 
   /********** Stats & init **********/
-  function updateStats(){ qs('#statBookings').textContent = load(LS.BOOKINGS).length; qs('#statPhotos').textContent = load(LS.PHOTOS).length; qs('#statComplaints').textContent = load(LS.COMPLAINTS).length; }
+  
+  async function updateStats(){
+  // Local stats
+  qs('#statPhotos').textContent = load(LS.PHOTOS).length;
+  qs('#statComplaints').textContent = load(LS.COMPLAINTS).length;
+
+  // 🔥 Firestore-backed booking count
+  try{
+    const snap = await db.collection(BOOKINGS_COLLECTION).get();
+    qs('#statBookings').textContent = snap.size;
+  }catch(e){
+    console.warn('Firestore stats failed, fallback to local', e);
+    qs('#statBookings').textContent = load(LS.BOOKINGS).length;
+  }
+}
 
   /********** Complaint registration (unchanged) **********/
   // complaint form wiring in initAll
