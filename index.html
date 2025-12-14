@@ -1246,7 +1246,7 @@ saveBookingToFirestore(booking)
     }
 
     toast('Booking saved — generating PDF...');
-    downloadTicketPDF(booking).then(()=>{ renderRecent(); updateStats(); updatePreview(); renderAdminSummary(); renderAdminFromFirestore(); });
+    downloadTicketPDF(booking).then(()=>{ renderRecent(); updateStats(); updatePreview(); renderAdminSummary();startAdminRealtimeSync();}); 
   }
 
   /********** Gallery & Complaints (unchanged) **********/
@@ -1372,7 +1372,7 @@ row.querySelector('.delete-btn')
   renderRecent();
   updateStats();
   renderAdminSummary();
-  renderAdminFromFirestore();
+  startAdminRealtimeSync();
 }
 
   async function deleteBooking(id){
@@ -1395,7 +1395,7 @@ row.querySelector('.delete-btn')
   renderRecent();
   updateStats();
   renderAdminSummary();
-  renderAdminFromFirestore();
+  startAdminRealtimeSync();
 }
 async function deleteAllBookings(){
   if(!isAdminUnlocked()){
@@ -1421,7 +1421,7 @@ async function deleteAllBookings(){
     renderRecent();
     updateStats();
     renderAdminSummary();
-    renderAdminFromFirestore();
+    startAdminRealtimeSync();
 
     toast('✅ All bookings cleared');
   }catch(err){
@@ -1728,7 +1728,13 @@ async function handleScannedCode(code){
 
     // ✅ Mark used in Firestore
     await docRef.update({ used:true });
-
+// 🔄 Sync localStorage booking on this device
+let localArr = load(LS.BOOKINGS);
+const idx = localArr.findIndex(b => b.id === code);
+if(idx !== -1){
+  localArr[idx].used = true;
+  save(LS.BOOKINGS, localArr);
+}
     beepSuccess.play();
     statusEl.textContent = '✅ Verified & Marked Used';
 
@@ -1738,7 +1744,7 @@ async function handleScannedCode(code){
 
     renderRecent(); // refresh client view if same device
     updateStats();
-renderAdminFromFirestore();
+startAdminRealtimeSync();
   }catch(err){
     console.error(err);
     toast('Verification error');
@@ -1845,20 +1851,27 @@ renderAdminFromFirestore();
   /********** Stats & init **********/
   
   async function updateStats(){
-  // Local stats
+  // Photos & complaints remain local
   qs('#statPhotos').textContent = load(LS.PHOTOS).length;
   qs('#statComplaints').textContent = load(LS.COMPLAINTS).length;
 
-  // 🔥 Firestore-backed booking count
-  try{
-    const snap = await db.collection(BOOKINGS_COLLECTION).get();
-    qs('#statBookings').textContent = snap.size;
-  }catch(e){
-    console.warn('Firestore stats failed, fallback to local', e);
-    qs('#statBookings').textContent = load(LS.BOOKINGS).length;
-  }
-}
+  let myBookings = [];
 
+  try{
+    // 🔥 Firestore = source of truth
+    myBookings = await getMyBookingsFromFirestore(DEVICE_ID);
+  }catch(err){
+    // fallback to localStorage
+    myBookings = load(LS.BOOKINGS).filter(
+      b => b.deviceId === DEVICE_ID
+    );
+  }
+
+  // ✅ COUNT ONLY UNUSED (ACTIVE) TICKETS
+  const activeCount = myBookings.filter(b => !b.used).length;
+
+  qs('#statBookings').textContent = activeCount;
+}
   /********** Complaint registration (unchanged) **********/
   // complaint form wiring in initAll
 
@@ -1894,28 +1907,43 @@ function initViewToggle(){
     applyViewMode(forced ? 'auto' : 'desktop');
   });
 }
-async function renderAdminFromFirestore(){
+let adminUnsubscribe = null;
+
+function startAdminRealtimeSync(){
   if(!isAdminUnlocked()) return;
 
-  const snap = await db.collection(BOOKINGS_COLLECTION).get();
-  const bookings = snap.docs.map(d => d.data());
+  // Prevent duplicate listeners
+  if(adminUnsubscribe) adminUnsubscribe();
 
-  const total = bookings.length;
-  const used = bookings.filter(b => b.used).length;
-  const unused = total - used;
+  adminUnsubscribe = db
+    .collection(BOOKINGS_COLLECTION)
+    .onSnapshot(snapshot => {
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayCount = bookings.filter(b => b.date === today).length;
+      const bookings = snapshot.docs.map(d => d.data());
 
-  const el = qs('#adminAnalytics');
-  if(el){
-    el.innerHTML = `
-      <strong>Total Tickets:</strong> ${total}<br>
-      <strong>Verified (Used):</strong> ${used}<br>
-      <strong>Unverified:</strong> ${unused}<br>
-      <strong>Booked Today:</strong> ${todayCount}
-    `;
-  }
+      const total = bookings.length;
+      const used = bookings.filter(b => b.used).length;
+      const unused = total - used;
+
+      const today = new Date().toISOString().split('T')[0];
+      const todayCount = bookings.filter(b => b.date === today).length;
+
+      const el = qs('#adminAnalytics');
+      if(el){
+        el.innerHTML = `
+          <strong>Total Tickets:</strong> ${total}<br>
+          <strong>Verified (Used):</strong> ${used}<br>
+          <strong>Unverified:</strong> ${unused}<br>
+          <strong>Booked Today:</strong> ${todayCount}
+        `;
+      }
+
+      // Keep admin UI in sync
+      renderAdminSummary();
+      renderVerifyLog();
+
+      console.log('🔄 Admin live sync updated');
+    });
 }
   function initAll(){
     qs('#year').textContent = new Date().getFullYear();
@@ -1954,7 +1982,7 @@ async function renderAdminFromFirestore(){
     qs('#complaintForm')?.addEventListener('submit', async (e)=>{ e.preventDefault(); const name=qs('#cName').value.trim(); const contact=qs('#cContact').value.trim(); const type=qs('#cType').value; const desc=qs('#cDesc').value.trim(); if(!desc) return toast('Describe incident'); const file = qs('#cPhoto').files[0]; let photoData=null; if(file) photoData = await new Promise(r=>{ const fr=new FileReader(); fr.onload=ev=>r(ev.target.result); fr.readAsDataURL(file); }); const rec = { id:'CP'+Date.now(), name, contact, type, desc, photoData, ts:new Date().toISOString(), resolved:false }; const arr = load(LS.COMPLAINTS); arr.unshift(rec); save(LS.COMPLAINTS,arr); toast('Complaint registered'); renderComplaints(); renderAdmin(); });
 
     // admin unlock
-    qs('#adminBtn')?.addEventListener('click', ()=>{ const pwd = prompt('Admin password (demo):'); if(pwd==='admin123'){ setAdminUnlocked(true); qs('#adminTabBtn').style.display='inline-block'; qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="admin"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#admin').style.display='block'; renderAdmin(); renderAdminFromFirestore();toast('Admin unlocked'); } else toast('Wrong password'); });
+    qs('#adminBtn')?.addEventListener('click', ()=>{ const pwd = prompt('Admin password (demo):'); if(pwd==='admin123'){ setAdminUnlocked(true); qs('#adminTabBtn').style.display='inline-block'; qsa('.nav button').forEach(b=>b.classList.remove('active')); qs('.nav button[data-to="admin"]').classList.add('active'); qsa('.pane').forEach(p=>p.style.display='none'); qs('#admin').style.display='block'; renderAdmin(); startAdminRealtimeSync();toast('Admin unlocked'); } else toast('Wrong password'); });
 
     // inventory manager wiring
     qs('#invAttraction')?.addEventListener('change', renderInventorySlotOptions);
