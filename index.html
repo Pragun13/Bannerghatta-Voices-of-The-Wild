@@ -722,7 +722,7 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 // ===============================================
   /*********** CONFIG & STORAGE KEYS ***********/
-  const LS_VERIFY_LOG = 'bbp_verify_log';
+  
 
 const beepSuccess = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg');
 const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg');
@@ -747,7 +747,7 @@ async function loadSiteAsset(key){
   return doc.exists ? doc.data().data : null;
 }
 const BOOKINGS_COLLECTION = 'bookings';
-
+const VERIFY_COLLECTION = 'verification_logs';
 async function saveBookingToFirestore(booking){
   await db.collection(BOOKINGS_COLLECTION)
           .doc(booking.id)
@@ -768,6 +768,26 @@ async function getMyBookingsFromFirestore(deviceId){
     .get();
 
   return snap.docs.map(d => d.data());
+}
+async function addVerifyLogToFirestore(entry){
+  await db.collection(VERIFY_COLLECTION).add(entry);
+}
+
+function listenToVerifyLogs(callback){
+  return db.collection(VERIFY_COLLECTION)
+    .orderBy('ts', 'desc')
+    .limit(50)
+    .onSnapshot(snap=>{
+      const logs = snap.docs.map(d => d.data());
+      callback(logs);
+    });
+}
+
+async function clearVerifyLogsFirestore(){
+  const snap = await db.collection(VERIFY_COLLECTION).get();
+  const batch = db.batch();
+  snap.forEach(doc => batch.delete(doc.ref));
+  await batch.commit();
 }
 /*********** END FIRESTORE HELPERS ***********/
   // ================= DEVICE IDENTIFIER =================
@@ -1575,40 +1595,49 @@ async function deleteAllBookings(){
       totalsEl.innerHTML = `Total vehicles: ${totalVehicles}<br/>Total seats: ${totalSeats}<br/>Remaining vehicles (sample): ${remainingVehiclesSample}<br/>Remaining seats (sample): ${remainingSeatsSample}`;
     }
   }
+let unsubscribeVerify = null;
+
 function renderVerifyLog(){
+    if(!isAdminUnlocked()) return;
   const el = qs('#verifyLog');
   if(!el) return;
 
-  const arr = JSON.parse(localStorage.getItem(LS_VERIFY_LOG) || '[]');
-  const fDate = qs('#adminFilterDate')?.value || '';
+  if(unsubscribeVerify) unsubscribeVerify();
+
+  unsubscribeVerify = listenToVerifyLogs(logs=>{
+    el.innerHTML = '';
+
+    if(!logs.length){
+      el.innerHTML = '<div class="muted small">No verifications yet</div>';
+      return;
+    }
+
+    const fDate = qs('#adminFilterDate')?.value || '';
 const fAttr = qs('#adminFilterAttraction')?.value || '';
 const fStatus = qs('#adminFilterStatus')?.value || '';
 const hideUsed = qs('#hideUsedToggle')?.checked;
 
-  if(!arr.length){
-    el.innerHTML = '<div class="muted small">No verifications yet</div>';
-    return;
-  }
+logs.forEach(v=>{
+  // 📅 Date filter
+  if(fDate && !v.ts.startsWith(fDate)) return;
 
-  el.innerHTML = '';
-  arr.filter(v=>{
-  if(fDate && !v.ts.startsWith(fDate)) return false;
-  if(fAttr && v.attraction !== fAttr) return false;
-  if(fStatus === 'used' && v.status !== 'VERIFIED') return false;
-  if(fStatus === 'unused' && v.status === 'VERIFIED') return false;
-  if(hideUsed && v.status === 'VERIFIED') return false;
-  return true;
-})
-.slice(0,20)
-.forEach(v=>{
-    const row = document.createElement('div');
-    row.style.borderBottom = '1px dashed var(--glass-border)';
-    row.style.padding = '6px 0';
-    row.innerHTML = `
-      <strong>${v.id}</strong> — ${v.status}
-      <div class="muted small">${new Date(v.ts).toLocaleString()}</div>
-    `;
-    el.appendChild(row);
+  // 🎯 Attraction filter
+  if(fAttr && v.attraction !== fAttr) return;
+
+  // 📌 Status filter
+  if(fStatus && v.status.toLowerCase() !== fStatus) return;
+
+  // 👁 Hide verified tickets
+  if(hideUsed && v.status === 'VERIFIED') return;
+      const row = document.createElement('div');
+      row.style.borderBottom = '1px dashed var(--glass-border)';
+      row.style.padding = '6px 0';
+      row.innerHTML = `
+        <strong>${v.id}</strong> — ${v.status}
+        <div class="muted small">${new Date(v.ts).toLocaleString()}</div>
+      `;
+      el.appendChild(row);
+    });
   });
 }
   /********** SMS Log rendering + delete (new) **********/
@@ -1700,7 +1729,7 @@ async function scanLoop(){
 }
 async function handleScannedCode(code){
   const statusEl = qs('#verifyStatus');
-  const log = JSON.parse(localStorage.getItem(LS_VERIFY_LOG) || '[]');
+  
 
   try{
     const docRef = db.collection(BOOKINGS_COLLECTION).doc(code);
@@ -1709,8 +1738,12 @@ async function handleScannedCode(code){
     if(!snap.exists){
       beepError.play();
       statusEl.textContent = '❌ Invalid Ticket';
-      log.unshift({ id:code, status:'INVALID', ts:new Date().toISOString() });
-      localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
+      await addVerifyLogToFirestore({
+  id: code,
+  status: 'INVALID',
+  ts: new Date().toISOString()
+});
+      
       renderVerifyLog();
       return;
     }
@@ -1720,14 +1753,20 @@ async function handleScannedCode(code){
     if(booking.used){
       beepError.play();
       statusEl.textContent = '⚠️ Already Used';
-      log.unshift({ id:code, status:'ALREADY USED', ts:new Date().toISOString() });
-      localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
+      await addVerifyLogToFirestore({
+  id: code,
+  status: 'ALREADY USED',
+  ts: new Date().toISOString()
+});
+      
       renderVerifyLog();
       return;
     }
 
     // ✅ Mark used in Firestore
     await docRef.update({ used:true });
+    renderRecent();
+updateStats();
 // 🔄 Sync localStorage booking on this device
 let localArr = load(LS.BOOKINGS);
 const idx = localArr.findIndex(b => b.id === code);
@@ -1738,8 +1777,13 @@ if(idx !== -1){
     beepSuccess.play();
     statusEl.textContent = '✅ Verified & Marked Used';
 
-    log.unshift({ id:code, status:'VERIFIED', ts:new Date().toISOString() });
-    localStorage.setItem(LS_VERIFY_LOG, JSON.stringify(log));
+    await addVerifyLogToFirestore({
+  id: code,
+  status: 'VERIFIED',
+  ts: new Date().toISOString(),
+  attraction: booking.attraction
+});
+    
     renderVerifyLog();
 
     renderRecent(); // refresh client view if same device
@@ -1907,13 +1951,15 @@ function initViewToggle(){
     applyViewMode(forced ? 'auto' : 'desktop');
   });
 }
-let adminUnsubscribe = null;
 
 function startAdminRealtimeSync(){
   if(!isAdminUnlocked()) return;
 
-  // Prevent duplicate listeners
-  if(adminUnsubscribe) adminUnsubscribe();
+  // 🔴 IMPORTANT: prevent duplicate listeners
+  if (typeof adminUnsubscribe === 'function') {
+    adminUnsubscribe();
+    adminUnsubscribe = null;
+  }
 
   adminUnsubscribe = db
     .collection(BOOKINGS_COLLECTION)
@@ -1945,6 +1991,12 @@ function startAdminRealtimeSync(){
       console.log('🔄 Admin live sync updated');
     });
 }
+
+      // Keep admin UI in sync
+      renderAdminSummary();
+      renderVerifyLog();
+
+      console.log('🔄 Admin live sync updated');
   function initAll(){
     qs('#year').textContent = new Date().getFullYear();
 
@@ -2021,12 +2073,13 @@ qs('#manualVerifyBtn')?.addEventListener('click', ()=>{
   if(id) handleScannedCode(id.trim());
 });
 
-qs('#clearVerifyLogBtn')?.addEventListener('click', ()=>{
-  if(confirm('Clear verification history?')){
-    localStorage.removeItem(LS_VERIFY_LOG);
-    renderVerifyLog();
-  }
+qs('#clearVerifyLogBtn')?.addEventListener('click', async ()=>{
+  if(!confirm('Clear verification history for ALL admins?')) return;
+
+  await clearVerifyLogsFirestore();
+  toast('Verification history cleared globally');
 });
+  
     // theme/lang toggle
     qs('#themeToggle')?.addEventListener('click', ()=> { const root = document.documentElement; const cur = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light'; root.setAttribute('data-theme', cur); });
     qs('#lang')?.addEventListener('change', ()=> { const L = qs('#lang').value; const map = { en:{title:'Voices of the Wild',lead:'Explore Bannerghatta — book responsibly, share photos, and report concerns.'}, kn:{title:'ವಾಯ್ಸಸ್ ಆಫ್ ದ ವೈಲ್ಡ್',lead:'ಬ್ಯಾನರ್ಘಟ್ಟ — ಜವಾಬ್ದಾರಿಯಾಗಿ ಬುಕ್ ಮಾಡಿ, ಫೋಟೋಗಳನ್ನು ಹಂಚಿಕೊಳ್ಳಿ.'}, hi:{title:'वॉइसेस ऑफ द वाइल्ड',lead:'बनरघट्टा — जिम्मेदारी से बुक करें, फोटो साझा करें.'} }; const m = map[L]||map.en; qs('.h-title').textContent = m.title; qs('.h-lead').textContent = m.lead; });
