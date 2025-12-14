@@ -506,6 +506,35 @@ html[data-view="desktop"] .slot-grid{
     <div id="verifyStatus" class="muted small" style="margin-left:auto"></div>
   </div>
 </div>
+<!-- Admin Filters -->
+<div class="card" style="margin-top:12px">
+  <h3>Booking Filters</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+
+    <input id="adminFilterDate" type="date"
+      style="padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+
+    <select id="adminFilterAttraction"
+      style="padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+      <option value="">All Attractions</option>
+      <option value="safari">Safari</option>
+      <option value="zoo">Zoo</option>
+      <option value="butterfly">Butterfly Park</option>
+    </select>
+
+    <select id="adminFilterStatus"
+      style="padding:6px;border-radius:8px;border:1px solid var(--glass-border);background:transparent;color:inherit">
+      <option value="">All Status</option>
+      <option value="used">Used</option>
+      <option value="unused">Unused</option>
+    </select>
+
+    <label class="small">
+      <input type="checkbox" id="hideUsedToggle"> Hide Verified
+    </label>
+
+  </div>
+</div>
 <!-- Verification History -->
 <div class="card" style="margin-top:12px">
   <h3>Verification History</h3>
@@ -515,6 +544,13 @@ html[data-view="desktop"] .slot-grid{
     <button id="clearVerifyLogBtn" class="btn ghost">
       Clear History
     </button>
+  </div>
+</div>
+<!-- Global Analytics (Admin) -->
+<div class="card" style="margin-bottom:12px">
+  <h3>Global Ticket Analytics</h3>
+  <div id="adminAnalytics" class="muted small">
+    Loading analytics...
   </div>
 </div>
         <!-- Summary -->
@@ -702,6 +738,14 @@ const beepError   = new Audio('https://actions.google.com/sounds/v1/cartoon/wood
 
   const LS = { BOOKINGS:'bbp_bookings', PHOTOS:'bbp_photos', COMPLAINTS:'bbp_complaints', INVENTORY:'bbp_inventory' };
   /*********** FIRESTORE HELPERS ***********/
+  async function saveSiteAsset(key, data){
+  await db.collection('site_assets').doc(key).set({ data });
+}
+
+async function loadSiteAsset(key){
+  const doc = await db.collection('site_assets').doc(key).get();
+  return doc.exists ? doc.data().data : null;
+}
 const BOOKINGS_COLLECTION = 'bookings';
 
 async function saveBookingToFirestore(booking){
@@ -1536,6 +1580,10 @@ function renderVerifyLog(){
   if(!el) return;
 
   const arr = JSON.parse(localStorage.getItem(LS_VERIFY_LOG) || '[]');
+  const fDate = qs('#adminFilterDate')?.value || '';
+const fAttr = qs('#adminFilterAttraction')?.value || '';
+const fStatus = qs('#adminFilterStatus')?.value || '';
+const hideUsed = qs('#hideUsedToggle')?.checked;
 
   if(!arr.length){
     el.innerHTML = '<div class="muted small">No verifications yet</div>';
@@ -1543,7 +1591,16 @@ function renderVerifyLog(){
   }
 
   el.innerHTML = '';
-  arr.slice(0,20).forEach(v=>{
+  arr.filter(v=>{
+  if(fDate && !v.ts.startsWith(fDate)) return false;
+  if(fAttr && v.attraction !== fAttr) return false;
+  if(fStatus === 'used' && v.status !== 'VERIFIED') return false;
+  if(fStatus === 'unused' && v.status === 'VERIFIED') return false;
+  if(hideUsed && v.status === 'VERIFIED') return false;
+  return true;
+})
+.slice(0,20)
+.forEach(v=>{
     const row = document.createElement('div');
     row.style.borderBottom = '1px dashed var(--glass-border)';
     row.style.padding = '6px 0';
@@ -1724,23 +1781,66 @@ renderAdminFromFirestore();
 
   /********** Image manager (unchanged) **********/
   function dataURLFromFile(file){ return new Promise((res, rej)=>{ const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
-  async function saveLogo(){ const f = qs('#uploadLogo').files[0]; if(!f) return toast('Select a logo file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.LOGO, data); applySiteImages(); toast('Logo saved'); }
-  async function saveHero(){ const f = qs('#uploadHero').files[0]; if(!f) return toast('Select a hero file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.HERO, data); applySiteImages(); toast('Hero saved'); }
-  async function saveMap(){ const f = qs('#uploadMap').files[0]; if(!f) return toast('Select a map file'); const data = await dataURLFromFile(f); localStorage.setItem(SITE_LS.MAP, data); applySiteImages(); toast('Map saved'); }
+  async function saveLogo(){
+  const f = qs('#uploadLogo').files[0];
+  if(!f) return toast('Select a logo file');
 
-  function applySiteImages(){
-    const logoEls = document.querySelectorAll('img[data-site="logo"]');
-    const heroEls = document.querySelectorAll('img[data-site="hero"]');
-    const logoData = localStorage.getItem(SITE_LS.LOGO);
-    const heroData = localStorage.getItem(SITE_LS.HERO);
-    const mapData  = localStorage.getItem(SITE_LS.MAP);
-    if(logoData){ logoEls.forEach(el=>el.src = logoData); if(qs('#previewLogo')){ qs('#previewLogo').src=logoData; qs('#previewLogo').style.display='block'; } } else if(qs('#previewLogo')) qs('#previewLogo').style.display='none';
-    if(heroData){ heroEls.forEach(el=>el.src = heroData); if(qs('#previewHero')){ qs('#previewHero').src=heroData; qs('#previewHero').style.display='block'; } } else if(qs('#previewHero')) qs('#previewHero').style.display='none';
-    if(mapData && qs('#previewMap')){ qs('#previewMap').src=mapData; qs('#previewMap').style.display='block'; } else if(qs('#previewMap')) qs('#previewMap').style.display='none';
-    if(qs('#downloadLogoBtn')) qs('#downloadLogoBtn').disabled = !logoData;
-    if(qs('#downloadHeroBtn')) qs('#downloadHeroBtn').disabled = !heroData;
-    if(qs('#downloadMapBtn'))  qs('#downloadMapBtn').disabled  = !mapData;
+  const data = await dataURLFromFile(f);
+  await saveSiteAsset('logo', data);
+
+  applySiteImages();
+  toast('Logo saved globally');
+}
+  async function saveHero(){
+  const f = qs('#uploadHero').files[0];
+  if(!f) return toast('Select a hero file');
+
+  const data = await dataURLFromFile(f);
+  await saveSiteAsset('hero', data);
+
+  applySiteImages();
+  toast('Hero image saved globally');
+}
+  async function saveMap(){
+  const f = qs('#uploadMap').files[0];
+  if(!f) return toast('Select a map file');
+
+  const data = await dataURLFromFile(f);
+  await saveSiteAsset('map', data);
+
+  applySiteImages();
+  toast('Map saved globally');
+}
+  async function applySiteImages(){
+  try{
+    const logo = await loadSiteAsset('logo');
+    const hero = await loadSiteAsset('hero');
+    const map  = await loadSiteAsset('map');
+
+    if(logo){
+      qsa('img[data-site="logo"]').forEach(el => el.src = logo);
+      if(qs('#previewLogo')){
+        qs('#previewLogo').src = logo;
+        qs('#previewLogo').style.display = 'block';
+      }
+    }
+
+    if(hero){
+      qsa('img[data-site="hero"]').forEach(el => el.src = hero);
+      if(qs('#previewHero')){
+        qs('#previewHero').src = hero;
+        qs('#previewHero').style.display = 'block';
+      }
+    }
+
+    if(map && qs('#previewMap')){
+      qs('#previewMap').src = map;
+      qs('#previewMap').style.display = 'block';
+    }
+  }catch(e){
+    console.warn('applySiteImages failed', e);
   }
+}
 
   /********** Stats & init **********/
   
@@ -1797,16 +1897,25 @@ function initViewToggle(){
 async function renderAdminFromFirestore(){
   if(!isAdminUnlocked()) return;
 
-  const bookings = await getAllBookingsFromFirestore();
-  const area = qs('#adminFirestoreTotals');
+  const snap = await db.collection(BOOKINGS_COLLECTION).get();
+  const bookings = snap.docs.map(d => d.data());
 
-  if(!area) return;
+  const total = bookings.length;
+  const used = bookings.filter(b => b.used).length;
+  const unused = total - used;
 
-  area.innerHTML = `
-    <strong>Total bookings:</strong> ${bookings.length}<br/>
-    <strong>Used tickets:</strong> ${bookings.filter(b=>b.used).length}<br/>
-    <strong>Unused tickets:</strong> ${bookings.filter(b=>!b.used).length}
-  `;
+  const today = new Date().toISOString().split('T')[0];
+  const todayCount = bookings.filter(b => b.date === today).length;
+
+  const el = qs('#adminAnalytics');
+  if(el){
+    el.innerHTML = `
+      <strong>Total Tickets:</strong> ${total}<br>
+      <strong>Verified (Used):</strong> ${used}<br>
+      <strong>Unverified:</strong> ${unused}<br>
+      <strong>Booked Today:</strong> ${todayCount}
+    `;
+  }
 }
   function initAll(){
     qs('#year').textContent = new Date().getFullYear();
@@ -1954,6 +2063,10 @@ qs('#clearFiltersBtn')?.addEventListener('click', ()=>{
   if(qs('#filterAttraction')) qs('#filterAttraction').value = '';
   renderRecent();
   toast('Filters cleared');
+});
+['#adminFilterDate','#adminFilterAttraction','#adminFilterStatus','#hideUsedToggle']
+.forEach(sel=>{
+  qs(sel)?.addEventListener('change', renderVerifyLog);
 });
 initViewToggle();
   }
