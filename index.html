@@ -790,6 +790,24 @@ async function clearVerifyLogsFirestore(){
   await batch.commit();
 }
 /*********** END FIRESTORE HELPERS ***********/
+// ===== GLOBAL BOOKINGS CACHE (FOR SEAT CALCULATION ONLY) =====
+let GLOBAL_BOOKINGS_CACHE = [];
+let globalSeatsUnsub = null;
+
+function startGlobalSeatListener(){
+  if(globalSeatsUnsub) return; // prevent duplicate listeners
+
+  globalSeatsUnsub = db
+    .collection(BOOKINGS_COLLECTION)
+    .onSnapshot(snapshot => {
+      GLOBAL_BOOKINGS_CACHE = snapshot.docs.map(d => d.data());
+
+      // refresh UI that depends on remaining seats
+      updatePreview();
+      loadSlotsToModal();
+    });
+}
+// ============================================================
   // ================= DEVICE IDENTIFIER =================
 const DEVICE_ID_KEY = 'bbp_device_id';
 
@@ -873,7 +891,7 @@ const DEVICE_ID = getDeviceId();
   function getVehicleRemainingSeats(attraction, date, slot, vehicle){
     const vehicleCount = getVehicleCapacity(attraction, date, slot, vehicle);
     const capacitySeats = vehicleCount * (SEATS_PER_VEHICLE[vehicle] || 1);
-    const arr = load(LS.BOOKINGS);
+    const arr = GLOBAL_BOOKINGS_CACHE;
     let usedSeats = 0;
     for(let b of arr){
       if(b.attraction===attraction && b.date===date && b.slot===slot && b.vehicle===vehicle){
@@ -887,7 +905,7 @@ const DEVICE_ID = getDeviceId();
     const totalVeh = getVehicleCapacity(attraction,date,slot,vehicle);
     const usedSeats = (function(){
       let used=0;
-      const arr=load(LS.BOOKINGS);
+      const arr = GLOBAL_BOOKINGS_CACHE;
       for(let b of arr) if(b.attraction===attraction && b.date===date && b.slot===slot && b.vehicle===vehicle) used += Number(b.qty||0);
       return used;
     })();
@@ -905,7 +923,7 @@ const DEVICE_ID = getDeviceId();
       }
       return sum;
     } else {
-      const arr = load(LS.BOOKINGS); let used=0;
+      const arr = GLOBAL_BOOKINGS_CACHE; let used=0;
       for(let b of arr) if(b.attraction===attraction && b.date===date && b.slot===slot) used += Number(b.qty||0);
       return Math.max(0, SLOT_CAPACITY - used);
     }
@@ -1596,7 +1614,7 @@ async function deleteAllBookings(){
     }
   }
 let unsubscribeVerify = null;
-
+let adminUnsubscribe = null;
 function renderVerifyLog(){
     if(!isAdminUnlocked()) return;
   const el = qs('#verifyLog');
@@ -1992,11 +2010,7 @@ function startAdminRealtimeSync(){
     });
 }
 
-      // Keep admin UI in sync
-      renderAdminSummary();
-      renderVerifyLog();
-
-      console.log('🔄 Admin live sync updated');
+      
   function initAll(){
     qs('#year').textContent = new Date().getFullYear();
 
@@ -2097,6 +2111,7 @@ qs('#clearVerifyLogBtn')?.addEventListener('click', async ()=>{
     renderComplaints();
     renderRecent();
     updateStats();
+    startGlobalSeatListener();
     applySiteImages();
     applyDefaultsToUI();
     renderSmsLog();
